@@ -1,0 +1,37 @@
+{
+	"name": "superman",
+	"version": "20.0.0",
+	"publish": false,
+	"description": "Supervisor for isolated gearman workers",
+	"main": "index.mjs",
+	"scripts": {
+		"watch": "nodemon"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/UberGroupLimited/superman.git"
+	},
+	"keywords": [
+		"gearman",
+		"workers"
+	],
+	"author": "Félix Saparelli <felix@passcod.name> (https://passcod.name)",
+	"license": "UNLICENSED",
+	"bugs": {
+		"url": "https://github.com/UberGroupLimited/superman/issues"
+	},
+	"homepage": "https://github.com/UberGroupLimited/superman#readme",
+	"dependencies": {
+		"@iarna/toml": "^2.2.5",
+		"abraxas": "github:passcod/abraxas",
+		"fast-glob": "^3.2.2",
+		"influx": "^5.5.2",
+		"knex": "^0.21.1",
+		"ms": "^2.1.2",
+		"mysql2": "^2.1.0",
+		"rollbar": "^2.18.0"
+	},
+	"devDependencies": {
+		"nodemon": "^2.0.4"
+	}
+}
