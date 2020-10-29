@@ -1,3 +1,4 @@
+import Gearman from 'abraxas';
 import TOML from '@iarna/toml';
 import glob from 'fast-glob';
 import { promises as fs } from 'fs';
@@ -22,7 +23,24 @@ async function loadConfig() {
 	return TOML.parse(await fs.readFile(filename));
 }
 
-async function reload (config) {
+function handler (state, name) {
+	return (task) => {
+		const fn = state.functions.get(name);
+		fn.running.incr();
+		fn.count.incr();
+
+		// run the thing
+
+		fn.running.decr();
+	};
+}
+
+async function reload (config, client, state) {
+	if (state.quitting.load()) return;
+	if (state.reloading.cas(false, true)) return;
+
+	const gen = state.round.incr();
+
 	const mysql = knex({
 		client: 'mysql2',
 		connection: config.mysql,
@@ -33,6 +51,56 @@ async function reload (config) {
 		.from('pure_gearman_workers')
 		.where('active', true)
 		.andWhere('concurrency', '>', 0);
+
+	for (const worker in workers) {
+		if (!(worker.name || (worker.ns && worker.method))) {
+			ohno(new Error(`empty name or ns+method for id/index ${worker.id || index}`));
+			continue;
+		}
+
+		const name = worker.name || (worker.ns + '::' + worker.method);
+
+		let fn = state.functions.get(name);
+		if (!fn) state.functions.set(name, fn = {
+			gen,
+			executor: worker.executor,
+			concurrency: worker.concurrency,
+			running: new AtomicUint(0),
+			count: new AtomicUint(0),
+			handler: null,
+		});
+
+		fn.gen = gen;
+		if (fn.executor != worker.executor) {
+			fn.handler = null;
+			client.unregisterWorker(name);
+			fn.executor = worker.executor;
+		}
+
+		if (!fn.handler) {
+			fn.handler = handler(state, name);
+			client.registerWorker(name, fn.handler);
+		}
+
+		if (fn.concurrency != worker.concurrency) {
+			client.concurrency(name, fn.concurrency);
+			fn.concurrency = worker.concurrency;
+		}
+	}
+
+	for (const [name, fn] of state.functions.entries()) {
+		if (fn.gen != gen) {
+			client.unregisterWorker(name);
+			fn.handler = null;
+			if (fn.running.zero()) {
+				info(`Retiring ${name}; ran ${fn.count.load()} times`);
+				state.functions.delete(name);
+			}
+		}
+	}
+
+	info(`Now running with ${state.functions.size} functions`);
+	state.reloading.store(false);
 }
 
 let rollbarInstance;
@@ -59,9 +127,78 @@ function ohno (err, exit = false) {
 	if (exit !== false) process.exit(exit);
 }
 
+class AtomicBool {
+	constructor (initial) {
+		this.sab = new SharedArrayBuffer(1);
+		this.ta = new Uint8Array(this.sab);
+		Atomics.store(this.ta, 0, +!!initial);
+	}
+
+	load () {
+		return !!Atomics.load(this.ta, 0);
+	}
+
+	store (value) {
+		return !!Atomics.store(this.ta, +!!value);
+	}
+
+	cas (expected, value) {
+		return !!Atomics.compareExchange(this.ta, 0, +!!expected, +!!value);
+	}
+}
+
+class AtomicUint {
+	constructor (initial) {
+		this.sab = new SharedArrayBuffer(4);
+		this.ta = new Uint32Array(this.sab);
+		Atomics.store(this.ta, 0, +initial);
+	}
+
+	load () {
+		return Atomics.load(this.ta, 0);
+	}
+
+	store (value) {
+		return Atomics.store(this.ta, +value);
+	}
+
+	cas (expected, value) {
+		return Atomics.compareExchange(this.ta, 0, +expected, +value);
+	}
+
+	incr () {
+		return Atomics.add(this.ta, 0, 1);
+	}
+
+	decr () {
+		return Atomics.sub(this.ta, 0, 1);
+	}
+
+	zero () {
+		return this.load() === 0;
+	}
+}
+
 (async () => {
 	const config = await loadConfig();
 	rollbar(config.rollbar);
 
-	await reload(config);
+	const client = Gearman.Client.connect({
+		servers: [config.gearman],
+	});
+
+	const state = {
+		function: new Map,
+		reloading: new AtomicBool(false),
+		quitting: new AtomicBool(false),
+		round: new AtomicUint(0),
+	};
+
+	await reload(config, client, state);
+
+	// TODO: listen to USR1 and reload
+	// TODO: listen to TERM and gracefully shutdown:
+	//       - call client.forgetAllWorkers()
+	//       - stop listening to USR1
+	//       - shut down when last worker is done
 })().catch(err => ohno(err, 1));
