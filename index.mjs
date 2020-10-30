@@ -5,8 +5,13 @@ import { promises as fs } from 'fs';
 import Influx from 'influx';
 import ms from 'ms';
 import knex from 'knex';
-import { env } from 'process';
+import { config, env, kill, on } from 'process';
 import Rollbar from 'rollbar';
+import cp from 'child_process';
+import path from 'path';
+import os from 'os';
+import readline from 'readline';
+import { timingSafeEqual } from 'crypto';
 
 export function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms))
@@ -24,15 +29,103 @@ async function loadConfig() {
 }
 
 function handler (state, name) {
-	return (task) => {
+	return async (task) => {
 		const fn = state.functions.get(name);
 		fn.running.incr();
 		fn.count.incr();
 
-		// run the thing
+		try {
+			const workload = Buffer.from(task.payload);
+			const workdir = await fs.mkdtemp(path.join(os.tmpdir(), name+task.uniqueid));
 
-		fn.running.decr();
+			await new Promise((resolve, reject) => {
+				const run = cp.execFile(fn.executor, [
+					name,
+					task.uniqueid,
+					''+workload.length,
+				], {
+					cwd: workdir,
+					env: [],
+					maxBuffer: 128 * 1024**2, // 128MB
+					...state.workerOpts,
+				});
+
+				const stderr = '';
+				run.stderr.on('data', (chunk) => {
+					stderr += chunk.toString();
+				});
+
+				const reader = readline.createInterface({
+					input: run.stdout,
+					terminal: false,
+				});
+				reader.on('line', (line) => {
+					try {
+						const data = JSON.parse(line);
+						switch (data.type) {
+							case 'complete':
+								let completion;
+								if (data.error) {
+									completion = data.error;
+								} else {
+									completion = data.data;
+								}
+
+								task.end(JSON.stringify(completion));
+							break;
+
+							case 'update':
+								task.update(JSON.stringify(data.data)); // to be implemented in abraxas
+							break;
+
+							case 'progress':
+								task.progress(task.numerator, task.denominator); // to be implemented in abraxas
+							break;
+
+							default:
+								throw new Error(`unsupported event type: ${data.type}`);
+						}
+					} catch (err) {
+						ohno(err);
+					}
+				});
+
+				run.on('error', (err) => {
+					run.removeAllListeners();
+					reject(err);
+				});
+
+				run.on('exit', (code) => {
+					if (code === 0) {
+						run.removeAllListeners();
+						resolve();
+					} else {
+						run.removeAllListeners();
+						reject(new Error(`worker executor exited with ${code}\n${stderr}`));
+					}
+				});
+			});
+		} catch (err) {
+			ohno(err);
+			task.error(err);
+		} finally {
+			fn.running.decr();
+			await fs.rmdir(workdir, {
+				maxRetries: 20,
+				recursive: true,
+			});
+		}
 	};
+}
+
+async function executable(executor) {
+	try {
+		const fh = await fs.open(executor);
+		const stat = await fh.stat();
+		return !!(stat.isFile() && (stat.mode & 1));
+	} catch (_) {
+		return false;
+	}
 }
 
 async function reload (config, client, state) {
@@ -55,6 +148,14 @@ async function reload (config, client, state) {
 	for (const worker in workers) {
 		if (!(worker.name || (worker.ns && worker.method))) {
 			ohno(new Error(`empty name or ns+method for id/index ${worker.id || index}`));
+			continue;
+		}
+
+		// the executor provides a simple way to get some work done on
+		// select nodes, such that if the executor (= worker program)
+		// doesn't exist or isn't executable, the worker will be silently
+		// skipped here. so resist the urge to make this an error e hoa!
+		if (!await executable(worker.executable)) {
 			continue;
 		}
 
@@ -83,7 +184,7 @@ async function reload (config, client, state) {
 		}
 
 		if (fn.concurrency != worker.concurrency) {
-			client.concurrency(name, fn.concurrency);
+			client.concurrency(name, fn.concurrency); // to be implemented in abraxas
 			fn.concurrency = worker.concurrency;
 		}
 	}
@@ -187,11 +288,25 @@ class AtomicUint {
 		servers: [config.gearman],
 	});
 
+	const workerOpts = {};
+	if (config.worker?.env) workerOpts.env = config.worker.env;
+	if (config.worker?.timeout) workerOpts.timeout = config.worker.timeout;
+	if (config.worker?.max_buffer) workerOpts.maxBuffer = config.worker.max_buffer;
+	if (config.worker?.user) workerOpts.uid =
+		typeof config.worker.user == 'number'
+		? config.worker.user
+		: userid.uid(config.worker.user);
+	if (config.worker?.group) workerOpts.gid =
+		typeof config.worker.group == 'number'
+		? config.worker.group
+		: userid.gid(config.worker.group);
+
 	const state = {
 		function: new Map,
 		reloading: new AtomicBool(false),
 		quitting: new AtomicBool(false),
 		round: new AtomicUint(0),
+		workerOpts,
 	};
 
 	await reload(config, client, state);

@@ -7,6 +7,7 @@ dependencies:
   ms: 2.1.2
   mysql2: 2.2.5
   rollbar: 2.19.4
+  userid: 1.0.0-beta.6
 devDependencies:
   nodemon: 2.0.6
 lockfileVersion: 5.1
@@ -194,6 +195,12 @@ packages:
       node: '>=8'
     resolution:
       integrity: sha512-1Yj8h9Q+QDF5FzhMs/c9+6UntbD5MkRfRwac8DoEm9ZfUBZ7tZ55YcGVAzEe4bXsdQHEk+s9S5wsOKVdZrw0tQ==
+  /bindings/1.5.0:
+    dependencies:
+      file-uri-to-path: 1.0.0
+    dev: false
+    resolution:
+      integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==
   /bluebird/3.7.2:
     dev: false
     resolution:
@@ -633,6 +640,10 @@ packages:
     dev: false
     resolution:
       integrity: sha512-i7FVWL8HhVY+CTkwFxkN2mk3h+787ixS5S63eb78diVRc1MCssarHq3W5cj0av7YDSwmaV928RNag+U1etRQ7w==
+  /file-uri-to-path/1.0.0:
+    dev: false
+    resolution:
+      integrity: sha512-0Zt+s3L7Vf1biwWZ29aARiVYLx7iMGnEUl9x33fbB/j3jR81u/O2LbqK+Bm1CDSNDKVtJ/YjwY7TUd5SkeLQLw==
   /fill-range/4.0.0:
     dependencies:
       extend-shallow: 2.0.1
@@ -1450,6 +1461,10 @@ packages:
       node: '>=0.10.0'
     resolution:
       integrity: sha512-fpoe2T0RbHwBTBUOftAfBPaDEi06ufaUai0mE6Yn1kacc3SnTErfb/h+X94VXzI64rKFHYImXSvdwGGCmwOqCA==
+  /node-addon-api/2.0.2:
+    dev: false
+    resolution:
+      integrity: sha512-Ntyt4AIXyaLIuMHF6IOoTakB3K+RWxwtsHNRxllEoA6vPwP9o4866g6YWDLUdnucilZhmkxiHwHr11gAENw+QA==
   /nodemon/2.0.6:
     dependencies:
       chokidar: 3.4.3
@@ -2167,6 +2182,18 @@ packages:
       node: '>=0.10.0'
     resolution:
       integrity: sha512-cwESVXlO3url9YWlFW/TA9cshCEhtu7IKJ/p5soJ/gGpj7vbvFrAY/eIioQ6Dw23KjZhYgiIo8HOs1nQ2vr/oQ==
+  /userid/1.0.0-beta.6:
+    dependencies:
+      bindings: 1.5.0
+      node-addon-api: 2.0.2
+    dev: false
+    engines:
+      node: '>=8.4.0'
+    os:
+      - '!win32'
+    requiresBuild: true
+    resolution:
+      integrity: sha512-QUWfmjvoVRrZXRIkRnBPAGcXkbuTBhIxzkWWWitp1AgO4Eivzc75ilbDASmRq6/876ElKrKzOwUp3ulV7kvhLg==
   /util-deprecate/1.0.2:
     dev: false
     resolution:
@@ -2251,3 +2278,4 @@ specifiers:
   mysql2: ^2.1.0
   nodemon: ^2.0.4
   rollbar: ^2.18.0
+  userid: ^1.0.0-beta.6

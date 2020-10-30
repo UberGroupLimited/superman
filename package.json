@@ -29,7 +29,8 @@
 		"knex": "^0.21.1",
 		"ms": "^2.1.2",
 		"mysql2": "^2.1.0",
-		"rollbar": "^2.18.0"
+		"rollbar": "^2.18.0",
+		"userid": "^1.0.0-beta.6"
 	},
 	"devDependencies": {
 		"nodemon": "^2.0.4"
