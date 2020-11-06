@@ -24,15 +24,15 @@
 	"dependencies": {
 		"@iarna/toml": "^2.2.5",
 		"abraxas": "github:passcod/abraxas",
-		"fast-glob": "^3.2.2",
-		"influx": "^5.5.2",
-		"knex": "^0.21.1",
+		"fast-glob": "^3.2.4",
+		"influx": "^5.6.3",
+		"knex": "^0.21.12",
 		"ms": "^2.1.2",
-		"mysql2": "^2.1.0",
-		"rollbar": "^2.18.0",
+		"mysql2": "^2.2.5",
+		"rollbar": "^2.19.4",
 		"userid": "^1.0.0-beta.6"
 	},
 	"devDependencies": {
-		"nodemon": "^2.0.4"
+		"nodemon": "^2.0.6"
 	}
 }
