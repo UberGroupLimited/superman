@@ -75,11 +75,11 @@ function handler (state, name) {
 							break;
 
 							case 'update':
-								task.update(JSON.stringify(data.data)); // to be implemented in abraxas
+								task.update(JSON.stringify(data.data));
 							break;
 
 							case 'progress':
-								task.progress(task.numerator, task.denominator); // to be implemented in abraxas
+								task.progress(task.numerator, task.denominator);
 							break;
 
 							default:
@@ -128,71 +128,90 @@ async function executable(executor) {
 	}
 }
 
-async function reload (config, client, state) {
-	if (state.quitting.load()) return;
+async function reload (config, state) {
 	if (state.reloading.cas(false, true)) return;
 
 	const gen = state.round.incr();
 
-	const mysql = knex({
-		client: 'mysql2',
-		connection: config.mysql,
-	});
-
-	const workers = config.workers ||
-		await mysql
-		.from('pure_gearman_workers')
-		.where('active', true)
-		.andWhere('concurrency', '>', 0);
-
-	for (const worker in workers) {
-		if (!(worker.name || (worker.ns && worker.method))) {
-			ohno(new Error(`empty name or ns+method for id/index ${worker.id || index}`));
-			continue;
-		}
-
-		// the executor provides a simple way to get some work done on
-		// select nodes, such that if the executor (= worker program)
-		// doesn't exist or isn't executable, the worker will be silently
-		// skipped here. so resist the urge to make this an error e hoa!
-		if (!await executable(worker.executable)) {
-			continue;
-		}
-
-		const name = worker.name || (worker.ns + '::' + worker.method);
-
-		let fn = state.functions.get(name);
-		if (!fn) state.functions.set(name, fn = {
-			gen,
-			executor: worker.executor,
-			concurrency: worker.concurrency,
-			running: new AtomicUint(0),
-			count: new AtomicUint(0),
-			handler: null,
+	if (!state.quitting.load()) {
+		const mysql = knex({
+			client: 'mysql2',
+			connection: config.mysql,
 		});
 
-		fn.gen = gen;
-		if (fn.executor != worker.executor) {
-			fn.handler = null;
-			client.unregisterWorker(name);
-			fn.executor = worker.executor;
-		}
+		const workers = config.workers ||
+			await mysql
+			.from('pure_gearman_workers')
+			.where('active', true)
+			.andWhere('concurrency', '>', 0);
 
-		if (!fn.handler) {
-			fn.handler = handler(state, name);
-			client.registerWorker(name, fn.handler);
-		}
+		for (const worker in workers) {
+			if (!(worker.name || (worker.ns && worker.method))) {
+				ohno(new Error(`empty name or ns+method for id/index ${worker.id || index}`));
+				continue;
+			}
 
-		if (fn.concurrency != worker.concurrency) {
-			client.concurrency(name, fn.concurrency); // to be implemented in abraxas
-			fn.concurrency = worker.concurrency;
+			// the executor provides a simple way to get some work done on
+			// select nodes, such that if the executor (= worker program)
+			// doesn't exist or isn't executable, the worker will be silently
+			// skipped here. so resist the urge to make this an error e hoa!
+			if (!await executable(worker.executable)) {
+				continue;
+			}
+
+			const name = worker.name || (worker.ns + '::' + worker.method);
+
+			let fn = state.functions.get(name);
+			if (!fn) state.functions.set(name, fn = {
+				gen,
+				executor: worker.executor,
+				concurrency: worker.concurrency,
+				running: new AtomicUint(0),
+				count: new AtomicUint(0),
+				handler: null,
+				gearman: null,
+			});
+
+			// run one gearman worker per function to be able to control the
+			// concurrency of each function separately through the amount of
+			// jobs that are grabbed from the server (maxJobs).
+
+			fn.gen = gen;
+
+			if (!fn.gearman) {
+				fn.handler = null;
+				fn.gearman = Gearman.Client.connect({
+					servers: [config.gearman],
+				});
+			}
+
+			if (fn.executor != worker.executor) {
+				fn.handler = null;
+				fn.gearman.unregisterWorker(name);
+				fn.executor = worker.executor;
+			}
+
+			if (!fn.handler) {
+				fn.handler = handler(state, name);
+				fn.gearman.registerWorker(name, fn.handler);
+			}
+
+			if (fn.concurrency != worker.concurrency) {
+				fn.gearman.maxJobs = fn.concurrency;
+				fn.concurrency = worker.concurrency;
+			}
 		}
 	}
 
 	for (const [name, fn] of state.functions.entries()) {
 		if (fn.gen != gen) {
-			client.unregisterWorker(name);
 			fn.handler = null;
+
+			if (fn.gearman) {
+				fn.gearman.disconnect();
+				fn.gearman = null;
+			}
+
 			if (fn.running.zero()) {
 				info(`Retiring ${name}; ran ${fn.count.load()} times`);
 				state.functions.delete(name);
@@ -284,10 +303,6 @@ class AtomicUint {
 	const config = await loadConfig();
 	rollbar(config.rollbar);
 
-	const client = Gearman.Client.connect({
-		servers: [config.gearman],
-	});
-
 	const workerOpts = {};
 	if (config.worker?.env) workerOpts.env = config.worker.env;
 	if (config.worker?.timeout) workerOpts.timeout = config.worker.timeout;
@@ -309,11 +324,11 @@ class AtomicUint {
 		workerOpts,
 	};
 
-	await reload(config, client, state);
+	await reload(config, state);
 
 	// TODO: listen to USR1 and reload
 	// TODO: listen to TERM and gracefully shutdown:
-	//       - call client.forgetAllWorkers()
-	//       - stop listening to USR1
+	//       - set quitting to true
+	//       - call reload repeatedly every second
 	//       - shut down when last worker is done
 })().catch(err => ohno(err, 1));
