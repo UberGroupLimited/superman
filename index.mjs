@@ -200,15 +200,18 @@ async function reload (config, state) {
 			rlog.debug('functions are from config');
 			functions = config.functions;
 		} else {
-			rlog.trace('connecting to mysql');
+			const connection = Object.assign({}, config.mysql);
+			delete connection.table;
+
+			rlog.trace({ connection }, 'connecting to mysql');
 			const mysql = knex({
 				client: 'mysql2',
 				connection: config.mysql,
 			});
 
-			rlog.debug('querying mysql');
+			rlog.debug({ table: config.mysql.table }, 'querying mysql');
 			functions = mysql
-				.from('pure_gearman_functions')
+				.from(config.mysql.table)
 				.where('active', true)
 				.andWhere('concurrency', '>', 0);
 		}

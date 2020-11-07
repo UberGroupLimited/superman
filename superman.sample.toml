@@ -30,7 +30,7 @@
 ## When debugging you'll want this:
 #packetDump = true
 
-## MySQL client options, passed directly to Knex (mysql2).
+## MySQL client options, passed directly to Knex (mysql2) to the exception of table.
 ## If empty, does not connect (you should then provide [[functions]]).
 [mysql]
 #host
@@ -38,6 +38,10 @@
 #database
 #user
 #password
+
+## Table to query for function definitions.
+##
+#table = "gearman_functions"
 
 ## Worker settings, applied to child processes
 [worker]
