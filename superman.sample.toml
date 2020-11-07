@@ -21,6 +21,9 @@
 #host = "127.0.0.1"
 #port = 4730
 
+## When debugging you'll want this:
+#packetDump = true
+
 ## MySQL client options, passed directly to Knex (mysql2).
 ## If empty, does not connect (you should then provide [[functions]]).
 [mysql]

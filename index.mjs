@@ -29,17 +29,17 @@ async function loadConfig() {
 }
 
 function handler (state, name) {
-	return async (task) => {
+	return (task) => (async () => {
 		const fn = state.functions.get(name);
 
 		const r = fn.running.incr();
 		const n = fn.count.incr();
 		info(`Running ${name} [${r + 1}|${n + 1}]`);
 
-		try {
-			const workload = Buffer.from(task.payload);
-			const workdir = await fs.mkdtemp(path.join(os.tmpdir(), name+task.uniqueid));
+		const workload = Buffer.from(task.payload);
+		const workdir = await fs.mkdtemp(path.join(os.tmpdir(), name+task.uniqueid));
 
+		try {
 			await new Promise((resolve, reject) => {
 				const run = cp.execFile(fn.executor, [
 					name,
@@ -68,6 +68,8 @@ function handler (state, name) {
 							case 'complete':
 								delete data.type;
 								task.end(JSON.stringify(data));
+								run.removeAllListeners();
+								resolve();
 							break;
 
 							case 'update':
@@ -113,7 +115,7 @@ function handler (state, name) {
 				recursive: true,
 			});
 		}
-	};
+	})().catch(ohno);
 }
 
 async function executable(executor) {
@@ -215,7 +217,7 @@ async function reload (config, state) {
 		}
 	}
 
-	info(`Now running with ${state.functions.size} functions`);
+	info(`Reloaded: ${state.functions.size} functions available`);
 	state.reloading.store(false);
 }
 
