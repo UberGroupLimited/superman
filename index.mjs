@@ -17,8 +17,10 @@ import { promises as fs } from 'fs';
 const log = pino({
 	redact: ['rollbar.accessToken'],
 });
-log.on('level-change', (_, newlevel) => {
-	log.trace({ newlevel }, 'logging level changed');
+log.on('level-change', (lvl, val, prevLvl, prevVal) => {
+	if (val != prevVal) {
+		log.trace({ loglevel: lvl }, 'logging level changed');
+	}
 });
 
 if (env.SUPERMAN_VERBOSE) log.level = env.SUPERMAN_VERBOSE;
