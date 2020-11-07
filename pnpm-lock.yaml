@@ -1,6 +1,7 @@
 dependencies:
   '@iarna/toml': 2.2.5
   abraxas: github.com/passcod/abraxas/823158390fbbd1d402d2aa9902c7bbd02859e6e8
+  bytes: 3.1.0
   fast-glob: 3.2.4
   influx: 5.6.3
   knex: 0.21.12_mysql2@2.2.5
@@ -238,6 +239,12 @@ packages:
     dev: false
     resolution:
       integrity: sha512-MQcXEUbCKtEo7bhqEs6560Hyd4XaovZlO/k9V3hjVUF/zwW7KBVdSK4gIt/bzwS9MbR5qob+F5jusZsb0YQK2A==
+  /bytes/3.1.0:
+    dev: false
+    engines:
+      node: '>= 0.8'
+    resolution:
+      integrity: sha512-zauLjrfCG+xvoyaqLoV8bLVXXNGC4JqlxFCutSDWA6fJrTo2ZuvLYTqZ7aHBLZSMOopbzwv8f+wZcVzfVTI2Dg==
   /cache-base/1.0.1:
     dependencies:
       collection-visit: 1.0.0
@@ -2262,11 +2269,13 @@ packages:
     dev: false
     name: abraxas
     resolution:
+      registry: 'https://registry.npmjs.org/'
       tarball: 'https://codeload.github.com/passcod/abraxas/tar.gz/823158390fbbd1d402d2aa9902c7bbd02859e6e8'
     version: 2.1.10
 specifiers:
   '@iarna/toml': ^2.2.5
   abraxas: 'github:passcod/abraxas'
+  bytes: ^3.1.0
   fast-glob: ^3.2.4
   influx: ^5.6.3
   knex: ^0.21.12

@@ -24,6 +24,7 @@
 	"dependencies": {
 		"@iarna/toml": "^2.2.5",
 		"abraxas": "github:passcod/abraxas",
+		"bytes": "^3.1.0",
 		"fast-glob": "^3.2.4",
 		"influx": "^5.6.3",
 		"knex": "^0.21.12",

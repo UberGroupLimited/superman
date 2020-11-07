@@ -1,17 +1,17 @@
 import Gearman from 'abraxas';
-import TOML from '@iarna/toml';
-import glob from 'fast-glob';
-import { promises as fs } from 'fs';
 import Influx from 'influx';
-import ms from 'ms';
-import knex from 'knex';
-import { config, env, kill, on } from 'process';
 import Rollbar from 'rollbar';
+import TOML from '@iarna/toml';
+import bytes from 'bytes';
 import cp from 'child_process';
-import path from 'path';
+import glob from 'fast-glob';
+import knex from 'knex';
+import ms from 'ms';
 import os from 'os';
+import path from 'path';
 import readline from 'readline';
-import { timingSafeEqual } from 'crypto';
+import { config, env, kill } from 'process';
+import { promises as fs } from 'fs';
 
 export function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms))
@@ -31,8 +31,10 @@ async function loadConfig() {
 function handler (state, name) {
 	return async (task) => {
 		const fn = state.functions.get(name);
-		fn.running.incr();
-		fn.count.incr();
+
+		const r = fn.running.incr();
+		const n = fn.count.incr();
+		info(`Running ${name} [${r + 1}|${n + 1}]`);
 
 		try {
 			const workload = Buffer.from(task.payload);
@@ -50,7 +52,7 @@ function handler (state, name) {
 					...state.workerOpts,
 				});
 
-				const stderr = '';
+				let stderr = '';
 				run.stderr.on('data', (chunk) => {
 					stderr += chunk.toString();
 				});
@@ -64,14 +66,8 @@ function handler (state, name) {
 						const data = JSON.parse(line);
 						switch (data.type) {
 							case 'complete':
-								let completion;
-								if (data.error) {
-									completion = data.error;
-								} else {
-									completion = data.data;
-								}
-
-								task.end(JSON.stringify(completion));
+								delete data.type;
+								task.end(JSON.stringify(data));
 							break;
 
 							case 'update':
@@ -104,6 +100,8 @@ function handler (state, name) {
 						reject(new Error(`worker executor exited with ${code}\n${stderr}`));
 					}
 				});
+
+				run.stdin.end(workload);
 			});
 		} catch (err) {
 			ohno(err);
@@ -122,6 +120,7 @@ async function executable(executor) {
 	try {
 		const fh = await fs.open(executor);
 		const stat = await fh.stat();
+		fh.close();
 		return !!(stat.isFile() && (stat.mode & 1));
 	} catch (_) {
 		return false;
@@ -139,33 +138,33 @@ async function reload (config, state) {
 			connection: config.mysql,
 		});
 
-		const workers = config.workers ||
+		const functions = config.functions ||
 			await mysql
-			.from('pure_gearman_workers')
+			.from('pure_gearman_functions')
 			.where('active', true)
 			.andWhere('concurrency', '>', 0);
 
-		for (const worker in workers) {
-			if (!(worker.name || (worker.ns && worker.method))) {
-				ohno(new Error(`empty name or ns+method for id/index ${worker.id || index}`));
+		for (const [index, def] of functions.entries()) {
+			if (!(def.name || (def.ns && def.method))) {
+				ohno(new Error(`empty name or ns+method for id/index ${def.id || index}`));
 				continue;
 			}
 
 			// the executor provides a simple way to get some work done on
 			// select nodes, such that if the executor (= worker program)
-			// doesn't exist or isn't executable, the worker will be silently
+			// doesn't exist or isn't executable, the definition will be silently
 			// skipped here. so resist the urge to make this an error e hoa!
-			if (!await executable(worker.executable)) {
+			if (!await executable(def.executor)) {
 				continue;
 			}
 
-			const name = worker.name || (worker.ns + '::' + worker.method);
+			const name = def.name || (def.ns + '::' + def.method);
 
 			let fn = state.functions.get(name);
 			if (!fn) state.functions.set(name, fn = {
 				gen,
-				executor: worker.executor,
-				concurrency: worker.concurrency,
+				executor: def.executor,
+				concurrency: def.concurrency,
 				running: new AtomicUint(0),
 				count: new AtomicUint(0),
 				handler: null,
@@ -180,15 +179,13 @@ async function reload (config, state) {
 
 			if (!fn.gearman) {
 				fn.handler = null;
-				fn.gearman = Gearman.Client.connect({
-					servers: [config.gearman],
-				});
+				fn.gearman = Gearman.Client.connect(config.gearman);
 			}
 
-			if (fn.executor != worker.executor) {
+			if (fn.executor != def.executor) {
 				fn.handler = null;
 				fn.gearman.unregisterWorker(name);
-				fn.executor = worker.executor;
+				fn.executor = def.executor;
 			}
 
 			if (!fn.handler) {
@@ -196,9 +193,8 @@ async function reload (config, state) {
 				fn.gearman.registerWorker(name, fn.handler);
 			}
 
-			if (fn.concurrency != worker.concurrency) {
-				fn.gearman.maxJobs = fn.concurrency;
-				fn.concurrency = worker.concurrency;
+			if (fn.concurrency != def.concurrency) {
+				fn.gearman.maxJobs = fn.concurrency = def.concurrency;
 			}
 		}
 	}
@@ -305,8 +301,11 @@ class AtomicUint {
 
 	const workerOpts = {};
 	if (config.worker?.env) workerOpts.env = config.worker.env;
-	if (config.worker?.timeout) workerOpts.timeout = config.worker.timeout;
-	if (config.worker?.max_buffer) workerOpts.maxBuffer = config.worker.max_buffer;
+	if (config.worker?.timeout) workerOpts.timeout =
+		typeof config.worker.timeout == 'string'
+		? ms(config.worker.timeout)
+		: config.worker.timeout;
+	if (config.worker?.max_buffer) workerOpts.maxBuffer = bytes.parse(config.worker.max_buffer);
 	if (config.worker?.user) workerOpts.uid =
 		typeof config.worker.user == 'number'
 		? config.worker.user
@@ -317,7 +316,7 @@ class AtomicUint {
 		: userid.gid(config.worker.group);
 
 	const state = {
-		function: new Map,
+		functions: new Map,
 		reloading: new AtomicBool(false),
 		quitting: new AtomicBool(false),
 		round: new AtomicUint(0),
@@ -326,6 +325,7 @@ class AtomicUint {
 
 	await reload(config, state);
 
+	// TODO: reload on reload.interval
 	// TODO: listen to USR1 and reload
 	// TODO: listen to TERM and gracefully shutdown:
 	//       - set quitting to true
