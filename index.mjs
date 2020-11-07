@@ -9,15 +9,27 @@ import knex from 'knex';
 import ms from 'ms';
 import os from 'os';
 import path from 'path';
+import pino from 'pino';
 import readline from 'readline';
 import { config, env, kill } from 'process';
 import { promises as fs } from 'fs';
 
+const log = pino({
+	redact: ['rollbar.accessToken'],
+});
+log.on('level-change', (_, newlevel) => {
+	log.trace({ newlevel }, 'logging level changed');
+});
+
+if (env.SUPERMAN_VERBOSE) log.level = env.SUPERMAN_VERBOSE;
+
 export function sleep(ms) {
+	log.trace({ duration: ms }, 'sleeping');
 	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function loadConfig() {
+	log.trace('looking for config');
 	const filename = (await glob([
 		'./superman.toml',
 		'/apps/superman/live/superman.toml',
@@ -25,22 +37,43 @@ async function loadConfig() {
 	]))[0];
 
 	if (!filename) throw new Error('Cannot find a superman.toml configuration file');
-	return TOML.parse(await fs.readFile(filename));
+	log.debug({ filename }, 'found config');
+
+	const contents = (await fs.readFile(filename)).toString();
+	log.trace({ contents }, 'read config');
+
+	const config = TOML.parse(contents);
+	log.debug({ config }, 'parsed config');
+	return config;
 }
 
 function handler (state, name) {
-	return (task) => (async () => {
-		const fn = state.functions.get(name);
+	const hlog = log.child({ fn: name });
 
-		const r = fn.running.incr();
-		const n = fn.count.incr();
-		info(`Running ${name} [${r + 1}|${n + 1}]`);
+	hlog.trace('created handler');
+	return (task) => (async () => {
+		const tlog = hlog.child({ jobid: task.jobid });
+		tlog.debug('got task');
+
+		const fn = state.functions.get(name);
+		tlog.trace('loaded function');
+
+		const running = fn.running.incr();
+		const count = fn.count.incr();
+		tlog.info({ running, count, concurrency: fn.concurrency }, 'running function');
 
 		const workload = Buffer.from(task.payload);
-		const workdir = await fs.mkdtemp(path.join(os.tmpdir(), name+task.uniqueid));
+		tlog.debug({ length: workload.length }, 'obtained payload');
+
+		const tmpname = `${name.replace(/\W+/g, '')}-${task.uniqueid}-workdir`;
+		tlog.trace({ tmpname }, 'generated tmpdir name');
+		const workdir = await fs.mkdtemp(path.join(os.tmpdir(), tmpname));
+		tlog.debug({ workdir }, 'created workdir');
 
 		try {
+			tlog.trace('wrapping process spawn');
 			await new Promise((resolve, reject) => {
+				tlog.debug({ executor: fn.executor, args: [name, task.uniqueid, workload.length] }, 'spawning');
 				const run = cp.execFile(fn.executor, [
 					name,
 					task.uniqueid,
@@ -54,18 +87,23 @@ function handler (state, name) {
 
 				let stderr = '';
 				run.stderr.on('data', (chunk) => {
+					tlog.trace({ chunk }, 'read stderr');
 					stderr += chunk.toString();
 				});
 
+				tlog.trace('attaching readline to stdout');
 				const reader = readline.createInterface({
 					input: run.stdout,
 					terminal: false,
 				});
 				reader.on('line', (line) => {
+					tlog.trace({ line }, 'read stdout');
 					try {
 						const data = JSON.parse(line);
 						switch (data.type) {
 							case 'complete':
+								log.debug('stdout got completion');
+								log.trace({ data }, 'completion');
 								delete data.type;
 								task.end(JSON.stringify(data));
 								run.removeAllListeners();
@@ -73,11 +111,15 @@ function handler (state, name) {
 							break;
 
 							case 'update':
+								log.debug('stdout got update');
+								log.trace({ data }, 'update');
 								task.update(JSON.stringify(data.data));
 							break;
 
 							case 'progress':
-								task.progress(task.numerator, task.denominator);
+								const { numerator, denominator } = data;
+								log.debug({ numerator, denominator }, 'stdout got progress');
+								task.progress(numerator, denominator);
 							break;
 
 							default:
@@ -89,27 +131,36 @@ function handler (state, name) {
 				});
 
 				run.on('error', (err) => {
+					tlog.debug({ err }, 'got error event');
 					run.removeAllListeners();
 					reject(err);
 				});
 
 				run.on('exit', (code) => {
+					tlog.trace({ code }, 'got exit event');
 					if (code === 0) {
+						tlog.debug('exit event with success, resolving');
 						run.removeAllListeners();
 						resolve();
 					} else {
+						tlog.debug('exit event with failure, rejecting');
 						run.removeAllListeners();
 						reject(new Error(`worker executor exited with ${code}\n${stderr}`));
 					}
 				});
 
+				tlog.trace('injecting workload on stdin');
 				run.stdin.end(workload);
 			});
 		} catch (err) {
 			ohno(err);
+			tlog.debug('sending gearman exception');
 			task.error(err);
 		} finally {
+			tlog.trace('decr running');
 			fn.running.decr();
+
+			tlog.debug({ workdir }, 'deleting workdir');
 			await fs.rmdir(workdir, {
 				maxRetries: 20,
 				recursive: true,
@@ -130,23 +181,40 @@ async function executable(executor) {
 }
 
 async function reload (config, state) {
-	if (state.reloading.cas(false, true)) return;
+	if (state.reloading.cas(false, true)) {
+		log.warn('not reloading while reloading');
+		return;
+	}
 
 	const gen = state.round.incr();
+	const rlog = log.child({ gen });
+	rlog.info('reloading');
 
-	if (!state.quitting.load()) {
-		const mysql = knex({
-			client: 'mysql2',
-			connection: config.mysql,
-		});
+	if (state.quitting.load()) {
+		rlog.warn('reloading while quitting (normal during graceful shutdown)');
+	} else {
+		let functions;
+		if (config.functions.length) {
+			rlog.debug('functions are from config');
+			functions = config.functions;
+		} else {
+			rlog.trace('connecting to mysql');
+			const mysql = knex({
+				client: 'mysql2',
+				connection: config.mysql,
+			});
 
-		const functions = config.functions ||
-			await mysql
-			.from('pure_gearman_functions')
-			.where('active', true)
-			.andWhere('concurrency', '>', 0);
+			rlog.debug('querying mysql');
+			functions = mysql
+				.from('pure_gearman_functions')
+				.where('active', true)
+				.andWhere('concurrency', '>', 0);
+		}
+		rlog.debug({ fns: functions.length }, 'got functions');
 
 		for (const [index, def] of functions.entries()) {
+			rlog.trace({ def }, 'loading function def');
+
 			if (!(def.name || (def.ns && def.method))) {
 				ohno(new Error(`empty name or ns+method for id/index ${def.id || index}`));
 				continue;
@@ -156,93 +224,131 @@ async function reload (config, state) {
 			// select nodes, such that if the executor (= worker program)
 			// doesn't exist or isn't executable, the definition will be silently
 			// skipped here. so resist the urge to make this an error e hoa!
+			rlog.trace('checking executor is executable');
 			if (!await executable(def.executor)) {
+				rlog.debug('skipping as executor isn’t available');
 				continue;
 			}
 
 			const name = def.name || (def.ns + '::' + def.method);
+			const dlog = rlog.child({ defname: name });
+			dlog.trace('constructed fn name');
 
+			dlog.trace('loading fn entry');
 			let fn = state.functions.get(name);
-			if (!fn) state.functions.set(name, fn = {
-				gen,
-				executor: def.executor,
-				concurrency: def.concurrency,
-				running: new AtomicUint(0),
-				count: new AtomicUint(0),
-				handler: null,
-				gearman: null,
-			});
+			if (!fn) {
+				dlog.debug('creating new fn entry');
+				state.functions.set(name, fn = {
+					gen,
+					executor: def.executor,
+					concurrency: def.concurrency,
+					running: new AtomicUint(0),
+					count: new AtomicUint(0),
+					handler: null,
+					gearman: null,
+				});
+			}
 
 			// run one gearman worker per function to be able to control the
 			// concurrency of each function separately through the amount of
 			// jobs that are grabbed from the server (maxJobs).
 
+			dlog.trace({ oldgen: fn.gen }, 'setting gen');
 			fn.gen = gen;
 
 			if (!fn.gearman) {
+				dlog.debug('no gearman, initialising');
 				fn.handler = null;
-				fn.gearman = Gearman.Client.connect(config.gearman);
+				fn.gearman = Gearman.Client.connect({
+					...config.gearman,
+					maxJobs: def.concurrency,
+				});
 			}
 
 			if (fn.executor != def.executor) {
+				dlog.debug('different executor, resetting handler');
 				fn.handler = null;
+				dlog.trace('unregistering worker');
 				fn.gearman.unregisterWorker(name);
 				fn.executor = def.executor;
 			}
 
 			if (!fn.handler) {
+				dlog.debug('no handler, initialising');
 				fn.handler = handler(state, name);
+				dlog.trace('registering worker');
 				fn.gearman.registerWorker(name, fn.handler);
 			}
 
 			if (fn.concurrency != def.concurrency) {
+				dlog.debug({ concurrency: { old: fn.concurrency, fut: def.concurrency } }, 'different concurrency, amending');
 				fn.gearman.maxJobs = fn.concurrency = def.concurrency;
 			}
 		}
 	}
 
+	rlog.debug('garbage-collecting old gen functions');
 	for (const [name, fn] of state.functions.entries()) {
+		const flog = rlog.child({ fn: name });
+		flog.trace('examining fn for gc');
 		if (fn.gen != gen) {
+			flog.debug({ fngen: fn.gen }, 'found function to gc');
+
+			flog.trace('clearing handler');
 			fn.handler = null;
 
 			if (fn.gearman) {
+				flog.debug('disconnecting gearman');
 				fn.gearman.disconnect();
 				fn.gearman = null;
 			}
 
 			if (fn.running.zero()) {
-				info(`Retiring ${name}; ran ${fn.count.load()} times`);
+				flog.info({ ran: fn.count.load() }, 'retiring function');
 				state.functions.delete(name);
+			} else {
+				flog.debug({ running: fn.running.load() }, 'function is still running');
 			}
 		}
 	}
 
-	info(`Reloaded: ${state.functions.size} functions available`);
+	rlog.info({ fns: state.functions.size }, 'reloaded');
+	rlog.trace('set reloading atomic to false');
 	state.reloading.store(false);
 }
 
-let rollbarInstance;
+let rollbarInstance = null;
 function rollbar (token = null) {
-	if (rollbarInstance) return rollbarInstance;
-	if (!token) return;
+	if (rollbarInstance !== null) return rollbarInstance;
+	if (!token) {
+		log.warn('no rollbar token');
+		return rollbarInstance = false;
+	}
 
-	return rollbarInstance = new Rollbar({
+	const opts = {
 		accessToken: token,
 		environment: env.NODE_ENV || 'development',
 		captureUncaught: true,
 		captureUnhandledRejections: true,
-	});
-}
+	};
 
-function info (message) {
-	console.info(new Date, '|', message)
+	log.debug({ rollbar: opts }, 'creating rollbar instance');
+	return rollbarInstance = new Rollbar(opts);
 }
 
 function ohno (err, exit = false) {
-	console.error(new Date, '|', err);
+	log.error({ err }, err.toString());
+
 	const roll = rollbar();
-	if (roll) roll.error(err);
-	if (exit !== false) process.exit(exit);
+	if (roll) {
+		log.trace('erroring to rollbar');
+		roll.error(err);
+	}
+
+	if (exit !== false) {
+		log.fatal({ exit }, 'exeunt');
+		process.exit(exit);
+	}
 }
 
 class AtomicBool {
@@ -257,7 +363,7 @@ class AtomicBool {
 	}
 
 	store (value) {
-		return !!Atomics.store(this.ta, +!!value);
+		return !!Atomics.store(this.ta, 0, +!!value);
 	}
 
 	cas (expected, value) {
@@ -277,7 +383,7 @@ class AtomicUint {
 	}
 
 	store (value) {
-		return Atomics.store(this.ta, +value);
+		return Atomics.store(this.ta, 0, +value);
 	}
 
 	cas (expected, value) {
@@ -298,7 +404,15 @@ class AtomicUint {
 }
 
 (async () => {
+	log.debug('init');
 	const config = await loadConfig();
+
+	if (config.verbose) {
+		log.trace({ loglevel: config.verbose }, 'setting log level');
+		log.level = config.verbose;
+	}
+
+	log.trace('configuring rollbar');
 	rollbar(config.rollbar);
 
 	const workerOpts = {};
@@ -316,21 +430,67 @@ class AtomicUint {
 		typeof config.worker.group == 'number'
 		? config.worker.group
 		: userid.gid(config.worker.group);
+	log.debug({ workerOpts }, 'worker options');
 
+	log.trace('initialising state');
 	const state = {
 		functions: new Map,
 		reloading: new AtomicBool(false),
 		quitting: new AtomicBool(false),
 		round: new AtomicUint(0),
 		workerOpts,
+		reload: {},
 	};
 
+	log.trace('initial reload');
 	await reload(config, state);
 
-	// TODO: reload on reload.interval
-	// TODO: listen to USR1 and reload
-	// TODO: listen to TERM and gracefully shutdown:
-	//       - set quitting to true
-	//       - call reload repeatedly every second
-	//       - shut down when last worker is done
+	if (config.interval) {
+		log.trace({ interval: config.interval }, 'parsing reload interval');
+		const interval =
+			typeof config.interval == 'string'
+			? ms(interval)
+			: interval;
+
+		log.info({ interval }, 'reloading on interval');
+		state.reload.interval = setInterval(() => reload(config, state).catch(ohno), interval);
+	}
+
+	log.trace({ signal: 'SIGUSR2' }, 'installing signal handler');
+	process.on('SIGUSR2', () => {
+		log.debug({ signal: 'SIGUSR2' }, 'received reload signal');
+		reload(config, state).catch(ohno);
+	});
+
+	async function shutdown (signal) {
+		log.debug({ signal }, 'received shutdown signal');
+
+		log.trace('set quitting atomic to true');
+		state.quitting.store(true);
+
+		if (state.reload.interval) {
+			log.trace('clear reload interval');
+			clearInterval(state.reload.interval);
+		}
+
+		log.debug('starting shutdown loop');
+		while (true) {
+			await reload(config, state);
+
+			if (state.functions.size == 0) {
+				log.info('all finished, shutting down');
+				process.exit(0);
+				return;
+			}
+
+			log.info({ fns: state.functions.size }, 'functions remaining');
+			await sleep(1000);
+		}
+	}
+
+	log.trace({ signal: 'SIGINT' }, 'installing signal handler');
+	process.on('SIGINT', () => shutdown('SIGINT').catch((err) => ohno(err, 5)));
+
+	log.trace({ signal: 'SIGTERM' }, 'installing signal handler');
+	process.on('SIGTERM', () => shutdown('SIGTERM').catch((err) => ohno(err, 6)));
 })().catch(err => ohno(err, 1));

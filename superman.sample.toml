@@ -1,13 +1,19 @@
+## Verbosity (log level)
+## Choose from trace, debug, info (default), warn, error, fatal
+## To set the log level earlier than config loading, use the
+## SUPERMAN_VERBOSE environment variable instead.
+##
+#verbose = "debug"
+
 ## Rollbar token. Rollbar is disabled if that's not provided.
 ## To set the rollbar environment, provide the NODE_ENV environment
 ## variable to the superman daemon.
 ##
 #rollbar = "token"
 
-
 [reload]
 ## Interval at which the function list is reloaded. Does not reload
-## on interval if not provided or falsy. Reloading on USR1 signal is
+## on interval if not provided or falsy. Reloading on USR2 signal is
 ## always enabled.
 ##
 ## Reloading does not reload this configuration.
