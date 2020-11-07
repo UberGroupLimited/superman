@@ -1,0 +1,58 @@
+## Rollbar token. Rollbar is disabled if that's not provided.
+## To set the rollbar environment, provide the NODE_ENV environment
+## variable to the superman daemon.
+##
+#rollbar = "token"
+
+
+[reload]
+## Interval at which the function list is reloaded. Does not reload
+## on interval if not provided or falsy. Reloading on USR1 signal is
+## always enabled.
+##
+## Reloading does not reload this configuration.
+## Syntax is anything ms() takes as a string, or milliseconds as an int.
+##
+#interval = "60s"
+
+## Gearman client options, passed directly to Abraxas.
+## If empty, connects to localhost on default port.
+[gearman]
+#host = "127.0.0.1"
+#port = 4730
+
+## MySQL client options, passed directly to Knex (mysql2).
+## If empty, does not connect (you should then provide [[functions]]).
+[mysql]
+#host
+#port
+#database
+#user
+#password
+
+## Worker settings, applied to child processes
+[worker]
+
+## Key-value pairs of environment variables
+## No environment is passed from daemon, defaults to empty.
+env = { PHP_ENV = "development" }
+
+## Timeout in ms() format. Disabled if unset/falsy (default).
+#timeout = "120s"
+
+## Maximum size of workload. Default: 128M.
+#max_buffer = "4G"
+
+## User to run worker as (recommended). Defaults to daemon user.
+#user = "www-data"
+
+## Group to run worker as (recommended). Defaults to daemon group.
+#group = "www-data"
+
+## Static function definitions.
+## If any are provided, mysql will not be called on.
+[[functions]]
+name = "Test::reverse"
+executor = "/home/code/php/uc/bin/run-order"
+concurrency = 3
+
