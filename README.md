@@ -69,6 +69,9 @@ no internal newlines, separated by newlines, in these formats:
    key will be JSON encoded and sent as `WORK_DATA`.
  - `{"type":"progress","numerator":123,"denominator":456}` for mid-run quotient
    progress updates. The values will be sent alongside `WORK_STATUS`.
+ - `{"type":"print","content":"a string"}` if you really need to, will output
+   the `content` string to STDERR. Prefer to write to stderr directly (which
+   will output to superman's STDERR), and prefer other means of dumping first.
 
 Exit with zero once completion has been sent (it doesn't need to be immediately
 after, and superman will not kill the process once completion is received, so

@@ -91,6 +91,7 @@ function handler (state, name) {
 				run.stderr.on('data', (chunk) => {
 					tlog.trace({ chunk }, 'read stderr');
 					stderr += chunk.toString();
+					process.stderr.write(chunk);
 				});
 
 				tlog.trace('attaching readline to stdout');
@@ -104,8 +105,8 @@ function handler (state, name) {
 						const data = JSON.parse(line);
 						switch (data.type) {
 							case 'complete':
-								log.debug('stdout got completion');
-								log.trace({ data }, 'completion');
+								tlog.debug('stdout got completion');
+								tlog.trace({ data }, 'completion');
 								delete data.type;
 								task.end(JSON.stringify(data));
 								run.removeAllListeners();
@@ -113,15 +114,20 @@ function handler (state, name) {
 							break;
 
 							case 'update':
-								log.debug('stdout got update');
-								log.trace({ data }, 'update');
+								tlog.debug('stdout got update');
+								tlog.trace({ data }, 'update');
 								task.update(JSON.stringify(data.data));
 							break;
 
 							case 'progress':
 								const { numerator, denominator } = data;
-								log.debug({ numerator, denominator }, 'stdout got progress');
+								tlog.debug({ numerator, denominator }, 'stdout got progress');
 								task.progress(numerator, denominator);
+							break;
+
+							case 'print':
+								tlog.debug('stdout got print');
+								process.stderr.write(data.content);
 							break;
 
 							default:
