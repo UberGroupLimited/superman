@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import Gearman from 'abraxas';
 import Influx from 'influx';
 import Rollbar from 'rollbar';

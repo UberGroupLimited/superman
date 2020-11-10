@@ -4,6 +4,9 @@
 	"publish": false,
 	"description": "Supervisor for isolated gearman workers",
 	"main": "index.mjs",
+	"bin": {
+		"superman": "./index.mjs"
+	},
 	"scripts": {
 		"watch": "nodemon"
 	},

@@ -13,7 +13,7 @@ dependencies:
   userid: 1.0.0-beta.6
 devDependencies:
   nodemon: 2.0.6
-lockfileVersion: 5.1
+lockfileVersion: 5.2
 packages:
   /@hapi/bourne/2.0.0:
     dev: false
@@ -2448,7 +2448,6 @@ packages:
     dev: false
     name: abraxas
     resolution:
-      registry: 'https://registry.npmjs.org/'
       tarball: 'https://codeload.github.com/passcod/abraxas/tar.gz/823158390fbbd1d402d2aa9902c7bbd02859e6e8'
     version: 2.1.10
 specifiers:
