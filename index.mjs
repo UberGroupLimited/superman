@@ -432,8 +432,8 @@ class AtomicUint {
 }
 
 (async () => {
-	log.debug('init');
-	const config = await loadConfig();
+	log.debug({ args: process.argv }, 'init');
+	const config = await loadConfig(process.argv[process.argv.length - 1] == '-');
 
 	if (config.verbose) {
 		log.trace({ loglevel: config.verbose }, 'setting log level');
