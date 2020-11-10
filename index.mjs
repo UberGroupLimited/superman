@@ -36,15 +36,15 @@ async function loadConfig(stdin = false) {
 		log.debug('reading config from stdin');
 		contents = readFileSync(process.stdin.fd);
 	} else {
-	log.trace('looking for config');
-	const filename = (await glob([
+		log.trace('looking for config');
+		const filename = (await glob([
 			'./superman.(json|toml)',
 			'/apps/superman/live/superman.(json|toml)',
 			'/etc/superman.(json|toml)',
-	]))[0];
+		]))[0];
 
 		if (!filename) throw new Error('Cannot find a superman configuration file');
-	log.debug({ filename }, 'found config');
+		log.debug({ filename }, 'found config');
 
 		contents = await fs.readFile(filename);
 	}
@@ -54,7 +54,7 @@ async function loadConfig(stdin = false) {
 	log.trace({ contents }, 'read config');
 
 	try {
-	const config = TOML.parse(contents);
+		const config = TOML.parse(contents);
 		log.debug({ config }, 'parsed toml config');
 		return config;
 	} catch (err) {
@@ -62,8 +62,8 @@ async function loadConfig(stdin = false) {
 
 		const config = JSON.parse(contents);
 		log.debug({ config }, 'parsed json config');
-	return config;
-}
+		return config;
+	}
 }
 
 function handler (state, name) {
@@ -219,7 +219,7 @@ async function reload (config, state) {
 		rlog.warn('reloading while quitting (normal during graceful shutdown)');
 	} else {
 		let functions;
-		if (config.functions.length) {
+		if (config.functions?.length) {
 			rlog.debug('functions are from config');
 			functions = config.functions;
 		} else {
@@ -232,9 +232,10 @@ async function reload (config, state) {
 				connection: config.mysql,
 			});
 
-			rlog.debug({ table: config.mysql.table }, 'querying mysql');
-			functions = mysql
-				.from(config.mysql.table)
+			const table = config.mysql?.table || 'gearman_functions';
+			rlog.debug({ table }, 'querying mysql');
+			functions = await mysql
+				.from(table)
 				.where('active', true)
 				.andWhere('concurrency', '>', 0);
 		}
