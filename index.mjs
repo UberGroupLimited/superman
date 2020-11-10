@@ -12,7 +12,7 @@ import path from 'path';
 import pino from 'pino';
 import readline from 'readline';
 import { config, env, kill } from 'process';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 
 const log = pino({
 	redact: ['rollbar.accessToken'],
@@ -30,23 +30,40 @@ export function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function loadConfig() {
+async function loadConfig(stdin = false) {
+	let contents;
+	if (stdin) {
+		log.debug('reading config from stdin');
+		contents = readFileSync(process.stdin.fd);
+	} else {
 	log.trace('looking for config');
 	const filename = (await glob([
-		'./superman.toml',
-		'/apps/superman/live/superman.toml',
-		'/etc/superman.toml',
+			'./superman.(json|toml)',
+			'/apps/superman/live/superman.(json|toml)',
+			'/etc/superman.(json|toml)',
 	]))[0];
 
-	if (!filename) throw new Error('Cannot find a superman.toml configuration file');
+		if (!filename) throw new Error('Cannot find a superman configuration file');
 	log.debug({ filename }, 'found config');
 
-	const contents = (await fs.readFile(filename)).toString();
+		contents = await fs.readFile(filename);
+	}
+
+	if (!contents) throw new Error('could not read config');
+	contents = contents.toString();
 	log.trace({ contents }, 'read config');
 
+	try {
 	const config = TOML.parse(contents);
-	log.debug({ config }, 'parsed config');
+		log.debug({ config }, 'parsed toml config');
+		return config;
+	} catch (err) {
+		log.trace({ err }, 'toml parse error');
+
+		const config = JSON.parse(contents);
+		log.debug({ config }, 'parsed json config');
 	return config;
+}
 }
 
 function handler (state, name) {
