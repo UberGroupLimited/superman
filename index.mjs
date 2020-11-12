@@ -90,6 +90,30 @@ function handler (state, name) {
 		const workdir = await fs.mkdtemp(path.join(os.tmpdir(), tmpname));
 		tlog.debug({ workdir }, 'created workdir');
 
+		async function stat(statname, runtime = null) {
+			if (!state.influx) return;
+
+			let [ns, method] = name.split('::', 2);
+			if (!method) { method = ns; ns = ''; }
+
+			const point = {
+				measurement: `${state.influx.prefix}${statname}`,
+				tags: { ns, method },
+				fields: { value: 1, running, count },
+			};
+
+			if (runtime !== null) {
+				// influx runtime is in secs, js's in ms
+				point.fields.runtime = runtime / 1000;
+			}
+
+			tlog.trace({ point }, 'send influx stat');
+			return state.influx.writePoints([point]);
+		}
+
+		const start = +new Date;
+		stat('start').catch(ohno);
+
 		try {
 			tlog.trace('wrapping process spawn');
 			await new Promise((resolve, reject) => {
@@ -128,6 +152,7 @@ function handler (state, name) {
 								delete data.type;
 								task.end(JSON.stringify(data));
 								run.removeAllListeners();
+								stat(data.error ? 'errored' : 'finished', new Date - start).catch(ohno);
 								resolve();
 							break;
 
@@ -191,6 +216,8 @@ function handler (state, name) {
 				maxRetries: 20,
 				recursive: true,
 			});
+
+			stat('finished', new Date - start).catch(ohno);
 		}
 	})().catch(ohno);
 }
@@ -471,6 +498,59 @@ class AtomicUint {
 		workerOpts,
 		reload: {},
 	};
+
+	if (config.influx) {
+		log.trace('initialising influx');
+		const incon = Object.assign({}, config.influx);
+		const prefix = incon.prefix || 'gearman_ucworker_';
+		delete incon.prefix;
+
+		state.influx = new Influx.InfluxDB({
+			schema: [
+				{
+					measurement: `${prefix}start`,
+					fields: {
+						value: Influx.FieldType.INTEGER,
+						running: Influx.FieldType.INTEGER,
+						count: Influx.FieldType.INTEGER,
+					},
+					tags: ['ns', 'method'],
+				},
+				{
+					measurement: `${prefix}complete`,
+					fields: {
+						value: Influx.FieldType.INTEGER,
+						running: Influx.FieldType.INTEGER,
+						count: Influx.FieldType.INTEGER,
+						runtime: Influx.FieldType.FLOAT,
+					},
+					tags: ['ns', 'method'],
+				},
+				{
+					measurement: `${prefix}errored`,
+					fields: {
+						value: Influx.FieldType.INTEGER,
+						running: Influx.FieldType.INTEGER,
+						count: Influx.FieldType.INTEGER,
+						runtime: Influx.FieldType.FLOAT,
+					},
+					tags: ['ns', 'method'],
+				},
+				{
+					measurement: `${prefix}finished`,
+					fields: {
+						value: Influx.FieldType.INTEGER,
+						running: Influx.FieldType.INTEGER,
+						count: Influx.FieldType.INTEGER,
+						runtime: Influx.FieldType.FLOAT,
+					},
+					tags: ['ns', 'method'],
+				},
+			],
+			...incon,
+		});
+		state.influx.prefix = prefix;
+	}
 
 	log.trace('initial reload');
 	await reload(config, state);

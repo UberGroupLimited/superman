@@ -43,6 +43,20 @@
 ##
 #table = "gearman_functions"
 
+## Influx client options, passed directly to node-influx, to the exception of prefix.
+## If empty, does not send influx stats.
+[influx]
+#host
+#port
+#username
+#password
+#database
+#protocol (http or https)
+
+## Prefix for the measurements
+## Default: 'gearman_ucworker_'
+prefix = "gearman_"
+
 ## Worker settings, applied to child processes
 [worker]
 
