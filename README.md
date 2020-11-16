@@ -47,7 +47,25 @@ It will gracefully shut down on SIGINT and SIGTERM.
 
 ## Executor interface
 
-Executor executables are run with three arguments:
+Executors must support capability reporting, by accepting the `--caps`
+flag and outputting the following JSON object then exitting with 0:
+
+```json
+{ "type": "caps", "caps": ["capabilities", "as", "strings"] }
+```
+
+The only capability at the moment is `single`. Later, this may/will be
+used to extend the executor protocol while maintaining compatibility.
+
+If a function's executor is not found on the system superman runs on, is
+not executable, does not support the caps flag, returns bad JSON, or
+does not support any required capability, it is **silently** ignored;
+this can be used as a simple mechanism to filter which hosts run which
+functions.
+
+### Single execution
+
+Executors with the `single` capability are run with three arguments:
 
  - the name of the gearman function
  - the unique id of the job

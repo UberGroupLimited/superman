@@ -12,8 +12,9 @@ import os from 'os';
 import path from 'path';
 import pino from 'pino';
 import readline from 'readline';
-import { config, env, kill } from 'process';
+import { env } from 'process';
 import { promises as fs, readFileSync } from 'fs';
+import { promisify } from 'util';
 
 const log = pino({
 	redact: ['rollbar.accessToken'],
@@ -222,14 +223,14 @@ function handler (state, name) {
 	})().catch(ohno);
 }
 
-async function executable(executor) {
+async function executorCaps(executor) {
 	try {
-		const fh = await fs.open(executor);
-		const stat = await fh.stat();
-		fh.close();
-		return !!(stat.isFile() && (stat.mode & 1));
+		const { stdout } = await promisify(cp.execFile)(executor, ['--caps']);
+		const { caps } = JSON.parse(stdout);
+		if (!Array.isArray(caps)) return [];
+		return caps;
 	} catch (_) {
-		return false;
+		return [];
 	}
 }
 
@@ -281,8 +282,8 @@ async function reload (config, state) {
 			// select nodes, such that if the executor (= worker program)
 			// doesn't exist or isn't executable, the definition will be silently
 			// skipped here. so resist the urge to make this an error e hoa!
-			rlog.trace('checking executor is executable');
-			if (!await executable(def.executor)) {
+			rlog.trace('checking executor supports single');
+			if (!(await executorCaps(def.executor)).includes('single')) {
 				rlog.debug('skipping as executor isn’t available');
 				continue;
 			}
