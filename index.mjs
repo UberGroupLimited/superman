@@ -558,12 +558,12 @@ class AtomicUint {
 	log.trace('initial reload');
 	await reload(config, state);
 
-	if (config.interval) {
-		log.trace({ interval: config.interval }, 'parsing reload interval');
+	if (config.reload?.interval) {
+		log.trace({ interval: config.reload.interval }, 'parsing reload interval');
 		const interval =
-			typeof config.interval == 'string'
-			? ms(interval)
-			: interval;
+			typeof config.reload.interval == 'string'
+			? ms(config.reload.interval)
+			: config.reload.interval;
 
 		log.info({ interval }, 'reloading on interval');
 		state.reload.interval = setInterval(() => reload(config, state).catch(ohno), interval);
