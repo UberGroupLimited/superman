@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict';
 import Gearman from 'abraxas';
 import Influx from 'influx';
 import Rollbar from 'rollbar';
@@ -92,7 +93,7 @@ function handler (state, name) {
 		tlog.debug({ workdir }, 'created workdir');
 
 		async function stat(statname, runtime = null) {
-			if (!state.influx) return;
+			if (!state.influx?.database) return;
 
 			let [ns, method] = name.split('::', 2);
 			if (!method) { method = ns; ns = ''; }
@@ -254,11 +255,12 @@ async function reload (config, state) {
 		} else {
 			const connection = Object.assign({}, config.mysql);
 			delete connection.table;
+			delete connection.client;
 
 			rlog.trace({ connection }, 'connecting to mysql');
 			const mysql = knex({
-				client: 'mysql2',
-				connection: config.mysql,
+				client: config.mysql?.client || 'mysql2',
+				connection,
 			});
 
 			const table = config.mysql?.table || 'gearman_functions';
@@ -500,7 +502,7 @@ class AtomicUint {
 		reload: {},
 	};
 
-	if (config.influx) {
+	if (state.influx?.database) {
 		log.trace('initialising influx');
 		const incon = Object.assign({}, config.influx);
 		const prefix = incon.prefix || 'gearman_ucworker_';
