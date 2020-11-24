@@ -505,7 +505,7 @@ class AtomicUint {
 	if (state.influx?.database) {
 		log.trace('initialising influx');
 		const incon = Object.assign({}, config.influx);
-		const prefix = incon.prefix || 'gearman_ucworker_';
+		const prefix = incon.prefix || 'superman_';
 		delete incon.prefix;
 
 		state.influx = new Influx.InfluxDB({

@@ -4,6 +4,7 @@ set -euo pipefail
 
 app="superman"
 mainbranch="main"
+upstream_rx="passcod"
 
 curbranch=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$curbranch" != "$mainbranch" ]]; then
@@ -17,7 +18,7 @@ if [[ ! -z "$gitstatus" ]]; then
 	exit 2
 fi
 
-upstream=$(git remote -v | grep -i ubergrouplimited -m1 | awk '{print $1}')
+upstream=$(git remote -v | grep -i "$upstream_rx" -m1 | awk '{print $1}')
 echo "Upstream remote discovered as: $upstream"
 
 git pull --rebase --autostash $upstream $mainbranch

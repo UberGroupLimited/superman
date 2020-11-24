@@ -54,8 +54,8 @@
 #protocol (http or https)
 
 ## Prefix for the measurements
-## Default: 'gearman_ucworker_'
-prefix = "gearman_"
+## Default: "superman_"
+#prefix = "gearman_workers_"
 
 ## Worker settings, applied to child processes
 [worker]

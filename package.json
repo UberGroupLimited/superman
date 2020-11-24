@@ -12,7 +12,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/UberGroupLimited/superman.git"
+		"url": "git+https://github.com/passcod/superman.git"
 	},
 	"keywords": [
 		"gearman",
@@ -21,9 +21,9 @@
 	"author": "Félix Saparelli <felix@passcod.name> (https://passcod.name)",
 	"license": "UNLICENSED",
 	"bugs": {
-		"url": "https://github.com/UberGroupLimited/superman/issues"
+		"url": "https://github.com/passcod/superman/issues"
 	},
-	"homepage": "https://github.com/UberGroupLimited/superman#readme",
+	"homepage": "https://github.com/passcod/superman#readme",
 	"dependencies": {
 		"@iarna/toml": "^2.2.5",
 		"abraxas": "github:passcod/abraxas",
