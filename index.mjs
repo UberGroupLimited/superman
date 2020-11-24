@@ -40,11 +40,11 @@ async function loadConfig(stdin = false) {
 		contents = readFileSync(process.stdin.fd);
 	} else {
 		log.trace('looking for config');
-		const filename = (await glob([
+		const filename = (await Promise.all([
 			'./superman.(json|toml)',
 			'/apps/superman/live/superman.(json|toml)',
 			'/etc/superman.(json|toml)',
-		]))[0];
+		].map(g => glob([g])))).flat()[0];
 
 		if (!filename) throw new Error('Cannot find a superman configuration file');
 		log.debug({ filename }, 'found config');
