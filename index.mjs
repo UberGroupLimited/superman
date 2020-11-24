@@ -1,21 +1,22 @@
 #!/usr/bin/env node
 'use strict';
-import Gearman from 'abraxas';
-import Influx from 'influx';
-import Rollbar from 'rollbar';
-import TOML from '@iarna/toml';
+import { env } from 'process';
+import { promises as fs, readFileSync } from 'fs';
+import { promisify } from 'util';
 import bytes from 'bytes';
 import cp from 'child_process';
+import Gearman from 'abraxas';
 import glob from 'fast-glob';
+import Influx from 'influx';
 import knex from 'knex';
 import ms from 'ms';
 import os from 'os';
 import path from 'path';
 import pino from 'pino';
 import readline from 'readline';
-import { env } from 'process';
-import { promises as fs, readFileSync } from 'fs';
-import { promisify } from 'util';
+import Rollbar from 'rollbar';
+import TOML from '@iarna/toml';
+import userid from 'userid';
 
 const log = pino({
 	redact: ['rollbar.accessToken'],
