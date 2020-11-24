@@ -1,11 +1,11 @@
 {
 	"name": "superman",
-	"version": "20.11.1",
+	"version": "20.11.2",
 	"publish": false,
 	"description": "Supervisor for isolated gearman workers",
 	"main": "index.mjs",
 	"bin": {
-		"superman": "./index.mjs"
+		"superman": "index.mjs"
 	},
 	"scripts": {
 		"watch": "nodemon"
