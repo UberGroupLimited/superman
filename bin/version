@@ -44,7 +44,13 @@ fi
 nextver="$nextyear.$(date +%-m).$nextbuild"
 echo "Next version to be $nextver, creating..."
 
-npm version "$nextver"
+sed -i "s/\"version\": \"$npmver\"/\"version\": \"$nextver\"/" package.json
+pnpm install
+sed -i "s/version = \"$npmver\"/version = \"$nextver\"/" Cargo.toml
+cargo check
+git add package.json pnpm-lock.yaml Cargo.toml Cargo.lock
+git commit -m "$nextver"
+git tag -fam "$nextver" "v$nextver"
 
 echo "Pushing to upstream"
 git push --follow-tags $upstream $mainbranch
