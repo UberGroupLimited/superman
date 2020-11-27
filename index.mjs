@@ -503,7 +503,7 @@ class AtomicUint {
 		reload: {},
 	};
 
-	if (state.influx?.database) {
+	if (config.influx?.database) {
 		log.trace('initialising influx');
 		const incon = Object.assign({}, config.influx);
 		const prefix = incon.prefix || 'superman_';
