@@ -94,13 +94,13 @@ function handler (state, name) {
 		tlog.debug({ workdir }, 'created workdir');
 
 		async function stat(statname, runtime = null) {
-			if (!state.influx?.database) return;
+			if (!state.influx) return;
 
 			let [ns, method] = name.split('::', 2);
 			if (!method) { method = ns; ns = ''; }
 
 			const point = {
-				measurement: `${state.influx.prefix}${statname}`,
+				measurement: `${state.influx.prefix||''}${statname}`,
 				tags: { ns, method },
 				fields: { value: 1, running, count },
 			};
