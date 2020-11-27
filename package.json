@@ -1,6 +1,6 @@
 {
 	"name": "superman",
-	"version": "20.11.4",
+	"version": "20.11.5",
 	"publish": false,
 	"description": "Supervisor for isolated gearman workers",
 	"main": "index.mjs",
