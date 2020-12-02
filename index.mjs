@@ -467,14 +467,15 @@ class AtomicUint {
 }
 
 (async () => {
+	const { version } = JSON.parse(await fs.readFile(
+		path.join(
+			path.dirname((new URL(import.meta.url)).pathname),
+			'./package.json'
+		)
+	));
+	log.info({ version });
+
 	if (['-v', '--version', 'version'].includes(process.argv[process.argv.length - 1])) {
-		const { version } = JSON.parse(await fs.readFile(
-			path.join(
-				path.dirname((new URL(import.meta.url)).pathname),
-				'./package.json'
-			)
-		));
-		log.info({ version });
 		process.exit(0);
 	}
 
@@ -510,6 +511,7 @@ class AtomicUint {
 	const state = {
 		meta: {
 			hostname: os.hostname(),
+			version,
 		},
 		functions: new Map,
 		reloading: new AtomicBool(false),
