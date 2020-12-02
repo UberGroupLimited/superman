@@ -345,6 +345,8 @@ async function reload (config, state) {
 				dlog.debug({ concurrency: { old: fn.concurrency, fut: def.concurrency } }, 'different concurrency, amending');
 				fn.gearman.maxJobs = fn.concurrency = def.concurrency;
 			}
+
+			fn.gearman.setClientId(`superman::v${state.meta.version}::${state.meta.hostname}::${name}=${fn.concurrency}`);
 		}
 	}
 
@@ -506,6 +508,9 @@ class AtomicUint {
 
 	log.trace('initialising state');
 	const state = {
+		meta: {
+			hostname: os.hostname(),
+		},
 		functions: new Map,
 		reloading: new AtomicBool(false),
 		quitting: new AtomicBool(false),
