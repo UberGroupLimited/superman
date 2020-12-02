@@ -15,7 +15,7 @@ mod packet;
 async fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let state = State::create("127.0.0.1:4370").await?;
+    let state = State::create("127.0.0.1:4730").await?;
     state.worker("supertest", "/usr/bin/true", 1).await?;
 
     Ok(())
@@ -56,7 +56,7 @@ impl State {
             .as_bytes()
             .to_vec();
 
-        let mut stream = TcpStream::connect("127.0.0.1:4730").await?;
+        let mut stream = TcpStream::connect(self.server).await?;
         Packet::request(Request::SetClientId { id: client_id })?
             .send(&mut stream)
             .await?;
