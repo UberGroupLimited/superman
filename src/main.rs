@@ -1,12 +1,15 @@
 // use uuid::Uuid;
 
 use async_std::{
+    io::{ReadExt, Write},
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::Path,
     prelude::*,
+    task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::{eyre, Result};
 use deku::DekuContainerWrite;
+use futures::io::AsyncReadExt;
 use packet::{Packet, Request, Response};
 
 mod packet;
@@ -56,24 +59,41 @@ impl State {
             .as_bytes()
             .to_vec();
 
-        let mut stream = TcpStream::connect(self.server).await?;
-        Packet::request(Request::SetClientId { id: client_id })?
-            .send(&mut stream)
+        let mut gear = TcpStream::connect(self.server).await?;
+        Request::SetClientId { id: client_id }
+            .send(&mut gear)
             .await?;
 
-        Packet::request(Request::CanDo {
+        Request::CanDo {
             name: name.as_bytes().to_vec(),
-        })?
-        .send(&mut stream)
+        }
+        .send(&mut gear)
         .await?;
+
+        Request::PreSleep.send(&mut gear).await?;
+
+        let (mut gear_read, gear_write) = gear.split();
+
+        let listener: JoinHandle<Result<()>> = spawn(async move {
+            loop {
+                let mut buf = vec![0_u8; 1024];
+                ReadExt::read(&mut gear_read, &mut buf).await?;
+                println!("bytes: {:?}", buf);
+                break;
+            }
+
+            Ok(())
+        });
+
+        listener.await?;
 
         Ok(())
     }
 }
 
-impl Packet {
-    pub(crate) async fn send(self, stream: &mut TcpStream) -> Result<()> {
-        let data = self.to_bytes()?;
+impl Request {
+    pub(crate) async fn send(self, stream: &mut (impl Write + Unpin)) -> Result<()> {
+        let data = Packet::request(self)?.to_bytes()?;
         stream.write_all(&data).await?;
         Ok(())
     }
