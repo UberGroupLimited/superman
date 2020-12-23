@@ -120,17 +120,18 @@ function handler (state, name) {
 		try {
 			tlog.trace('wrapping process spawn');
 			await new Promise((resolve, reject) => {
-				tlog.debug({ executor: fn.executor, args: [name, task.uniqueid, workload.length] }, 'spawning');
-				const run = cp.execFile(fn.executor, [
-					name,
-					task.uniqueid,
-					''+workload.length,
-				], {
+				const workerOpts = {
 					cwd: workdir,
 					env: [],
-					maxBuffer: 128 * 1024**2, // 128MB
+					maxBuffer: 128 * 1024 ** 2, // 128MB
 					...state.workerOpts,
-				});
+				};
+				if (fn.timeout > 0) workerOpts.timeout = fn.timeout * 1000;
+				tlog.trace({ workerOpts }, 'worker options');
+
+				const args = [name, task.uniqueid, '' + workload.length];
+				tlog.debug({ executor: fn.executor, args }, 'spawning');
+				const run = cp.execFile(fn.executor, args, workerOpts);
 
 				let stderr = '';
 				run.stderr.on('data', (chunk) => {
@@ -303,6 +304,7 @@ async function reload (config, state) {
 					gen,
 					executor: def.executor,
 					concurrency: def.concurrency,
+					timeout: null,
 					running: new AtomicUint(0),
 					count: new AtomicUint(0),
 					handler: null,
@@ -344,6 +346,11 @@ async function reload (config, state) {
 			if (fn.concurrency != def.concurrency) {
 				dlog.debug({ concurrency: { old: fn.concurrency, fut: def.concurrency } }, 'different concurrency, amending');
 				fn.gearman.maxJobs = fn.concurrency = def.concurrency;
+			}
+
+			if (fn.timeout != def.timeout) {
+				dlog.debug({ timeout: { old: fn.timeout, fut: def.timeout } }, 'different timeout, amending');
+				fn.gearman.maxJobs = fn.timeout = def.timeout;
 			}
 
 			fn.gearman.setClientId(`superman::v${state.meta.version}::${state.meta.hostname}::${name}=${fn.concurrency}`);
