@@ -18,9 +18,9 @@ pub struct Packet {
     )]
     length: usize,
     #[deku(cond = "*magic == PacketMagic::Request", ctx = "*length, *kind")]
-    request: Option<Request>,
+    pub request: Option<Request>,
     #[deku(cond = "*magic == PacketMagic::Response", ctx = "*length, *kind")]
-    response: Option<Response>,
+    pub response: Option<Response>,
 }
 
 impl Packet {

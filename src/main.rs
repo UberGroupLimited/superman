@@ -5,10 +5,11 @@ use async_std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::Path,
     prelude::*,
+    sync::channel,
     task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::{eyre, Result};
-use deku::DekuContainerWrite;
+use deku::{prelude::DekuError, DekuContainerRead, DekuContainerWrite};
 use futures::io::AsyncReadExt;
 use packet::{Packet, Request, Response};
 
@@ -74,18 +75,69 @@ impl State {
 
         let (mut gear_read, gear_write) = gear.split();
 
-        let listener: JoinHandle<Result<()>> = spawn(async move {
-            loop {
+        let (pkt_s, mut pkt_r) = channel(512);
+
+        let reader: JoinHandle<Result<()>> = spawn(async move {
+            let mut packet = Vec::with_capacity(1024);
+            'recv: loop {
                 let mut buf = vec![0_u8; 1024];
-                ReadExt::read(&mut gear_read, &mut buf).await?;
-                println!("bytes: {:?}", buf);
-                break;
+                let len = ReadExt::read(&mut gear_read, &mut buf).await?;
+                packet.extend(&buf[0..len]);
+                // todo: trace log(packet)
+
+                'parse: loop {
+                    if packet.is_empty() {
+                        break 'parse;
+                    }
+
+                    match Packet::from_bytes((&packet, 0)) {
+                        Ok(((rest, _), pkt)) => {
+                            // todo: debug log(pkt)
+
+                            if !rest.is_empty() {
+                                // todo: trace log("parsing more")
+                                packet = rest.to_vec();
+                            }
+
+                            if let Some(res @ Response::JobAssignUniq { .. }) = pkt.response {
+                                pkt_s.send(res).await;
+                            } else {
+                                // ignore packet
+                                // todo: debug log
+                            }
+
+                            continue 'parse;
+                        }
+                        Err(DekuError::Parse(msg)) => {
+                            if msg.contains("not enough data") {
+                                // todo: debug log
+                                continue 'recv;
+                            } else {
+                                // todo: be tolerant of gearman errors
+                                // warn and reset the buffer
+                                Err(DekuError::Parse(msg))?;
+                            }
+                        }
+                        Err(err) => {
+                            // todo: be tolerant of gearman errors
+                            // warn and reset the buffer
+                            Err(err)?;
+                        }
+                    }
+                }
+            }
+        });
+
+        let assignee: JoinHandle<Result<()>> = spawn(async move {
+            while let Some(pkt) = pkt_r.next().await {
+                dbg!(&pkt);
             }
 
             Ok(())
         });
 
-        listener.await?;
+        reader.await?;
+        assignee.await?;
 
         Ok(())
     }
