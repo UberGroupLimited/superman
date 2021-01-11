@@ -350,7 +350,7 @@ async function reload (config, state) {
 
 			if (fn.timeout != def.timeout) {
 				dlog.debug({ timeout: { old: fn.timeout, fut: def.timeout } }, 'different timeout, amending');
-				fn.gearman.timeout = fn.timeout = def.timeout;
+				fn.timeout = def.timeout;
 			}
 
 			fn.gearman.setClientId(`superman::v${state.meta.version}::${state.meta.hostname}::${name}=${fn.concurrency}`);
