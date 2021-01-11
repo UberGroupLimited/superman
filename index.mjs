@@ -154,7 +154,7 @@ function handler (state, name) {
 								tlog.debug('stdout got completion');
 								tlog.trace({ data }, 'completion');
 								delete data.type;
-								task.end(JSON.stringify(data));
+								task.end(JSON.stringify(data || {}));
 								run.removeAllListeners();
 								stat(data.error ? 'errored' : 'finished', new Date - start).catch(ohno);
 								resolve();
