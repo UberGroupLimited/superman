@@ -204,11 +204,18 @@ function handler (state, name) {
 					}
 				});
 
+				run.stdin.on('error', (err) => {
+					tlog.debug({ err }, 'got stdin error event');
+					run.removeAllListeners();
+					reject(err);
+				});
+
 				tlog.trace('injecting workload on stdin');
 				run.stdin.end(workload);
 			});
 		} catch (err) {
 			ohno(err);
+
 			tlog.debug('sending gearman exception');
 			task.error(err);
 		} finally {
