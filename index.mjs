@@ -154,7 +154,7 @@ function handler (state, name) {
 								tlog.debug('stdout got completion');
 								tlog.trace({ data }, 'completion');
 								delete data.type;
-								task.end(JSON.stringify(data));
+								task.end(JSON.stringify(data || {}));
 								run.removeAllListeners();
 								stat(data.error ? 'errored' : 'finished', new Date - start).catch(ohno);
 								resolve();
@@ -204,11 +204,18 @@ function handler (state, name) {
 					}
 				});
 
+				run.stdin.on('error', (err) => {
+					tlog.debug({ err }, 'got stdin error event');
+					run.removeAllListeners();
+					reject(err);
+				});
+
 				tlog.trace('injecting workload on stdin');
 				run.stdin.end(workload);
 			});
 		} catch (err) {
 			ohno(err);
+
 			tlog.debug('sending gearman exception');
 			task.error(err);
 		} finally {
@@ -350,7 +357,7 @@ async function reload (config, state) {
 
 			if (fn.timeout != def.timeout) {
 				dlog.debug({ timeout: { old: fn.timeout, fut: def.timeout } }, 'different timeout, amending');
-				fn.gearman.maxJobs = fn.timeout = def.timeout;
+				fn.timeout = def.timeout;
 			}
 
 			fn.gearman.setClientId(`superman::v${state.meta.version}::${state.meta.hostname}::${name}=${fn.concurrency}`);
