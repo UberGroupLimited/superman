@@ -1,6 +1,7 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
+    sync::Arc,
 };
 
 use crate::packet::{Packet, Request};
@@ -15,17 +16,20 @@ use deku::DekuContainerWrite;
 use futures::{io::WriteHalf, AsyncWrite, StreamExt};
 use log::trace;
 
-pub fn spawn(
-    mut gear_write: WriteHalf<TcpStream>,
-    mut req_r: Receiver<Request>,
-) -> JoinHandle<Result<()>> {
-    task::spawn(async move {
-        while let Some(pkt) = req_r.next().await {
-            pkt.send(&mut gear_write).await?;
-        }
+impl super::State {
+    pub fn writer(
+        self: Arc<Self>,
+        mut gear_write: WriteHalf<TcpStream>,
+        mut req_r: Receiver<Request>,
+    ) -> JoinHandle<Result<()>> {
+        task::spawn(async move {
+            while let Some(pkt) = req_r.next().await {
+                pkt.send(&mut gear_write).await?;
+            }
 
-        Ok(())
-    })
+            Ok(())
+        })
+    }
 }
 
 impl Request {
