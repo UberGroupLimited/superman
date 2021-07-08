@@ -1,20 +1,12 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-};
-
-use crate::packet::{Packet, Request};
+use crate::packet::Request;
 use async_std::{
     channel::bounded,
-    io::Write,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::Path,
-    prelude::*,
 };
 use color_eyre::eyre::{eyre, Result};
-use deku::DekuContainerWrite;
 use futures::io::AsyncReadExt;
-use log::{debug, info, trace};
+use log::{debug, info};
 
 mod assignee;
 mod reader;
@@ -91,26 +83,6 @@ impl State {
         reader.await?;
         writer.await?;
         assignee.await?;
-
-        Ok(())
-    }
-}
-
-impl Request {
-    pub(crate) async fn send(self, stream: &mut (impl Write + Unpin)) -> Result<()> {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        trace!("request [{:x}] sending: {:?}", &hash, &self);
-        let data = Packet::request(self)?.to_bytes()?;
-        trace!(
-            "request [{:x}] writing {} bytes to stream",
-            &hash,
-            data.len()
-        );
-        stream.write_all(&data).await?;
-        trace!("request [{:x}] done writing to stream", &hash);
 
         Ok(())
     }
