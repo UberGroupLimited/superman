@@ -1,5 +1,4 @@
 use deku::{bitvec::BitVec, prelude::*};
-use log::trace;
 
 #[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
 pub struct Packet {
@@ -26,7 +25,6 @@ pub struct Packet {
 
 impl Packet {
     pub fn request(r: Request) -> Result<Self, DekuError> {
-        trace!("converting request to packet: {:?}", r);
         let mut pkt = Self {
             magic: PacketMagic::Request,
             kind: 0,
@@ -39,7 +37,6 @@ impl Packet {
     }
 
     pub fn response(r: Response) -> Result<Self, DekuError> {
-        trace!("converting response to packet: {:?}", r);
         let mut pkt = Self {
             magic: PacketMagic::Response,
             kind: 0,

@@ -96,30 +96,36 @@ impl State {
         executor: impl AsRef<Path>,
         concurrency: usize,
     ) -> Result<()> {
-        let client_id = format!("{}::{}={}", self.base_id, name, concurrency)
+        debug!("connecting to gearman");
+        let mut gear = TcpStream::connect(self.server).await?;
+
+        let client_id = format!("{}::{}={}", self.base_id, name, concurrency);
+        debug!("naming ourself client_id={:?}", &client_id);
+        let client_id = client_id
             .as_bytes()
             .to_vec();
-
-        let mut gear = TcpStream::connect(self.server).await?;
         Request::SetClientId { id: client_id }
             .send(&mut gear)
             .await?;
 
+        debug!("declaring ourself for job={:?}", &name);
         Request::CanDo {
             name: name.as_bytes().to_vec(),
         }
         .send(&mut gear)
         .await?;
 
+        debug!("waiting for work");
         Request::PreSleep.send(&mut gear).await?;
 
-        let (mut gear_read, gear_write) = gear.split();
+        let (mut gear_read, mut gear_write) = gear.split();
 
         let (pkt_s, mut pkt_r) = bounded(512);
 
         let reader: JoinHandle<Result<()>> = spawn(async move {
             let mut packet = Vec::with_capacity(1024);
             'recv: loop {
+                trace!("waiting for data");
                 let mut buf = vec![0_u8; 1024];
                 let len = ReadExt::read(&mut gear_read, &mut buf).await?;
                 packet.extend(&buf[0..len]);
@@ -132,18 +138,20 @@ impl State {
 
                     match Packet::from_bytes((&packet, 0)) {
                         Ok(((rest, _), pkt)) => {
-                            debug!("parsed packet: {:?}", &pkt);
+                            trace!("parsed packet: {:?}", &pkt);
 
                             trace!("data left: {} bytes", rest.len());
                             packet = rest.to_vec();
 
                             if let Some(res @ Response::JobAssignUniq { .. }) = pkt.response {
+                                debug!("got a job assignment");
                                 pkt_s.send(res).await?;
                             } else if let Some(Response::Noop) = pkt.response {
                                 debug!("got a noop, asking for work");
-                                // TODO
+                                // TODO: move that to its own spawn + channel
+                                Request::GrabJobUniq.send(&mut gear_write).await?;
                             } else {
-                                debug!("ignoring irrelevant packet");
+                                trace!("ignoring irrelevant packet");
                             }
 
                             continue 'parse;
@@ -189,15 +197,15 @@ impl Request {
         self.hash(&mut hasher);
         let hash = hasher.finish();
 
-        debug!("request [{:x}] sending: {:?}", &hash, &self);
+        trace!("request [{:x}] sending: {:?}", &hash, &self);
         let data = Packet::request(self)?.to_bytes()?;
-        debug!(
+        trace!(
             "request [{:x}] writing {} bytes to stream",
             &hash,
             data.len()
         );
         stream.write_all(&data).await?;
-        debug!("request [{:x}] done writing to stream", &hash);
+        trace!("request [{:x}] done writing to stream", &hash);
 
         Ok(())
     }
