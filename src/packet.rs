@@ -1,4 +1,4 @@
-use deku::prelude::*;
+use deku::{prelude::*, bitvec::BitVec};
 
 #[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
 pub struct Packet {

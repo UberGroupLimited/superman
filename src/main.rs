@@ -1,11 +1,11 @@
 // use uuid::Uuid;
 
 use async_std::{
+    channel::bounded,
     io::{ReadExt, Write},
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::Path,
     prelude::*,
-    sync::channel,
     task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::{eyre, Result};
@@ -75,7 +75,7 @@ impl State {
 
         let (mut gear_read, gear_write) = gear.split();
 
-        let (pkt_s, mut pkt_r) = channel(512);
+        let (pkt_s, mut pkt_r) = bounded(512);
 
         let reader: JoinHandle<Result<()>> = spawn(async move {
             let mut packet = Vec::with_capacity(1024);
@@ -100,7 +100,7 @@ impl State {
                             }
 
                             if let Some(res @ Response::JobAssignUniq { .. }) = pkt.response {
-                                pkt_s.send(res).await;
+                                pkt_s.send(res).await?;
                             } else {
                                 // ignore packet
                                 // todo: debug log
