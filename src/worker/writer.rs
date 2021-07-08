@@ -1,7 +1,11 @@
-use crate::packet::{Request};
-use async_std::{channel::Receiver, net::TcpStream, task::{self, JoinHandle}};
-use color_eyre::eyre::{Result};
-use futures::{StreamExt, io::WriteHalf};
+use crate::packet::Request;
+use async_std::{
+    channel::Receiver,
+    net::TcpStream,
+    task::{self, JoinHandle},
+};
+use color_eyre::eyre::Result;
+use futures::{io::WriteHalf, StreamExt};
 
 pub fn spawn(
     mut gear_write: WriteHalf<TcpStream>,

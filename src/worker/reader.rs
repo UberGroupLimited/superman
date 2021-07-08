@@ -5,9 +5,9 @@ use async_std::{
     net::TcpStream,
     task::{self, JoinHandle},
 };
-use color_eyre::eyre::{Result};
+use color_eyre::eyre::Result;
 use deku::{prelude::DekuError, DekuContainerRead};
-use futures::io::{ReadHalf};
+use futures::io::ReadHalf;
 use log::{debug, trace, warn};
 
 pub fn spawn(

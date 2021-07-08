@@ -6,7 +6,7 @@ use std::{
 use crate::packet::{Packet, Request};
 use async_std::{
     channel::bounded,
-    io::{Write},
+    io::Write,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     path::Path,
     prelude::*,
