@@ -134,13 +134,14 @@ impl State {
                         Ok(((rest, _), pkt)) => {
                             debug!("parsed packet: {:?}", &pkt);
 
-                            if !rest.is_empty() {
-                                trace!("data left: {} bytes", rest.len());
-                                packet = rest.to_vec();
-                            }
+                            trace!("data left: {} bytes", rest.len());
+                            packet = rest.to_vec();
 
                             if let Some(res @ Response::JobAssignUniq { .. }) = pkt.response {
                                 pkt_s.send(res).await?;
+                            } else if let Some(Response::Noop) = pkt.response {
+                                debug!("got a noop, asking for work");
+                                // TODO
                             } else {
                                 debug!("ignoring irrelevant packet");
                             }
