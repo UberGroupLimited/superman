@@ -1,5 +1,10 @@
 // use uuid::Uuid;
 
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
+
 use async_std::{
     channel::bounded,
     io::{ReadExt, Write},
@@ -11,15 +16,45 @@ use async_std::{
 use color_eyre::eyre::{eyre, Result};
 use deku::{prelude::DekuError, DekuContainerRead, DekuContainerWrite};
 use futures::io::AsyncReadExt;
+use log::{debug, info, trace, warn};
 use packet::{Packet, Request, Response};
+use structopt::StructOpt;
 
 mod packet;
+
+#[derive(StructOpt, Debug)]
+struct Args {
+    #[structopt(short = "V", long, default_value = "info", env = "SUPERMAN_VERBOSE")]
+    pub log_level: log::Level,
+
+    #[structopt(
+        short,
+        long,
+        default_value = "127.0.0.1:4730",
+        env = "SUPERMAN_CONNECT"
+    )]
+    pub connect: String,
+}
 
 #[async_std::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
+    let args = Args::from_args_safe()?;
 
-    let state = State::create("127.0.0.1:4730").await?;
+    stderrlog::new()
+        .verbosity(match args.log_level {
+            log::Level::Error => 0,
+            log::Level::Warn => 1,
+            log::Level::Info => 2,
+            log::Level::Debug => 3,
+            log::Level::Trace => 4,
+        })
+        .timestamp(stderrlog::Timestamp::Millisecond)
+        .show_module_names(true)
+        .module("superman")
+        .init()?;
+
+    let state = State::create(args.connect).await?;
     state.worker("supertest", "/usr/bin/true", 1).await?;
 
     Ok(())
@@ -33,21 +68,26 @@ struct State {
 
 impl State {
     async fn create(server: impl ToSocketAddrs) -> Result<Self> {
-        Ok(Self {
-            server: server
-                .to_socket_addrs()
-                .await?
-                .next()
-                .ok_or(eyre!("no server addr provided"))?,
-            base_id: format!(
-                "{}::v{}::{}",
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION"),
-                hostname::get()?
-                    .into_string()
-                    .map_err(|s| eyre!("Hostname isn't UTF-8: {:?}", s))?
-            ),
-        })
+        let server = server
+            .to_socket_addrs()
+            .await?
+            .next()
+            .ok_or(eyre!("no server addr provided"))?;
+
+        let base_id = format!(
+            "{}::v{}::{}",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+            hostname::get()?
+                .into_string()
+                .map_err(|s| eyre!("Hostname isn't UTF-8: {:?}", s))?
+        );
+
+        info!("preparing superman");
+        info!("gearman server = {}", server);
+        info!("base id = {}", base_id);
+
+        Ok(Self { server, base_id })
     }
 
     async fn worker(
@@ -83,7 +123,7 @@ impl State {
                 let mut buf = vec![0_u8; 1024];
                 let len = ReadExt::read(&mut gear_read, &mut buf).await?;
                 packet.extend(&buf[0..len]);
-                // todo: trace log(packet)
+                trace!("received packet bytes: {:?}", &packet);
 
                 'parse: loop {
                     if packet.is_empty() {
@@ -92,36 +132,35 @@ impl State {
 
                     match Packet::from_bytes((&packet, 0)) {
                         Ok(((rest, _), pkt)) => {
-                            // todo: debug log(pkt)
+                            debug!("parsed packet: {:?}", &pkt);
 
                             if !rest.is_empty() {
-                                // todo: trace log("parsing more")
+                                trace!("data left: {} bytes", rest.len());
                                 packet = rest.to_vec();
                             }
 
                             if let Some(res @ Response::JobAssignUniq { .. }) = pkt.response {
                                 pkt_s.send(res).await?;
                             } else {
-                                // ignore packet
-                                // todo: debug log
+                                debug!("ignoring irrelevant packet");
                             }
 
                             continue 'parse;
                         }
                         Err(DekuError::Parse(msg)) => {
                             if msg.contains("not enough data") {
-                                // todo: debug log
+                                debug!("got partial packet, waiting for more");
                                 continue 'recv;
                             } else {
-                                // todo: be tolerant of gearman errors
-                                // warn and reset the buffer
-                                Err(DekuError::Parse(msg))?;
+                                warn!("bad packet, throwing away {} bytes", packet.len());
+                                warn!("parsing error: {}", msg);
+                                continue 'recv;
                             }
                         }
                         Err(err) => {
-                            // todo: be tolerant of gearman errors
-                            // warn and reset the buffer
-                            Err(err)?;
+                            warn!("bad packet, throwing away {} bytes", packet.len());
+                            warn!("parsing error: {}", err);
+                            continue 'recv;
                         }
                     }
                 }
@@ -145,8 +184,20 @@ impl State {
 
 impl Request {
     pub(crate) async fn send(self, stream: &mut (impl Write + Unpin)) -> Result<()> {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        debug!("request [{:x}] sending: {:?}", &hash, &self);
         let data = Packet::request(self)?.to_bytes()?;
+        debug!(
+            "request [{:x}] writing {} bytes to stream",
+            &hash,
+            data.len()
+        );
         stream.write_all(&data).await?;
+        debug!("request [{:x}] done writing to stream", &hash);
+
         Ok(())
     }
 }

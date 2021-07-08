@@ -1,4 +1,5 @@
-use deku::{prelude::*, bitvec::BitVec};
+use deku::{bitvec::BitVec, prelude::*};
+use log::trace;
 
 #[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
 pub struct Packet {
@@ -25,6 +26,7 @@ pub struct Packet {
 
 impl Packet {
     pub fn request(r: Request) -> Result<Self, DekuError> {
+        trace!("converting request to packet: {:?}", r);
         let mut pkt = Self {
             magic: PacketMagic::Request,
             kind: 0,
@@ -37,6 +39,7 @@ impl Packet {
     }
 
     pub fn response(r: Response) -> Result<Self, DekuError> {
+        trace!("converting response to packet: {:?}", r);
         let mut pkt = Self {
             magic: PacketMagic::Response,
             kind: 0,
@@ -58,7 +61,7 @@ enum PacketMagic {
     Response,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, DekuRead, DekuWrite)]
 #[deku(ctx = "datalen: usize, kind: u32", id = "kind")]
 pub enum Request {
     #[deku(id = "22")]
@@ -140,7 +143,7 @@ impl Request {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, DekuRead, DekuWrite)]
 #[deku(ctx = "datalen: usize, kind: u32", id = "kind")]
 pub enum Response {
     #[deku(id = "6")]
