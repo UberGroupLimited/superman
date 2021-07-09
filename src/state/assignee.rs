@@ -31,9 +31,9 @@ impl super::Worker {
 					let handle_hex = hex::encode(&handle);
 
 					debug!(
-						"[{}] handling job name={:?} unique={:?} workload bytes={}",
+						"[{}] [{}] handling job unique={:?} workload bytes={}",
+						self.name,
 						&handle_hex,
-						String::from_utf8_lossy(&name),
 						std::str::from_utf8(&unique)
 							.map(|s| s.to_owned())
 							.unwrap_or_else(|_| hex::encode(&unique)),
@@ -41,10 +41,7 @@ impl super::Worker {
 					);
 
 					if self.current_load.fetch_add(1, Ordering::Relaxed) + 1 < self.concurrency {
-						debug!(
-							"[{}] can still do more work, asking",
-							String::from_utf8_lossy(&name),
-						);
+						debug!("[{}] can still do more work, asking", self.name,);
 						req_s.send(Request::PreSleep).await?;
 					}
 
@@ -53,7 +50,10 @@ impl super::Worker {
 					task::spawn(async move {
 						sleep(Duration::from_secs(4)).await;
 
-						debug!("[{}] work done, sending complete", &handle_hex);
+						debug!(
+							"[{}] [{}] work done, sending complete",
+							this.name, &handle_hex
+						);
 						req_s
 							.send(Request::WorkComplete {
 								handle,
@@ -64,10 +64,7 @@ impl super::Worker {
 
 						if this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
 						{
-							debug!(
-								"[{}] can do more work now, asking",
-								String::from_utf8_lossy(&name),
-							);
+							debug!("[{}] can do more work now, asking", this.name);
 							req_s
 								.send(Request::PreSleep)
 								.await
@@ -75,7 +72,7 @@ impl super::Worker {
 						}
 					});
 				} else {
-					error!("assignee got unexpected packet: {:?}", pkt);
+					error!("[{}] assignee got unexpected packet: {:?}", self.name, pkt);
 				}
 			}
 

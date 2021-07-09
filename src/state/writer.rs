@@ -14,7 +14,7 @@ use async_std::{
 use color_eyre::eyre::Result;
 use deku::DekuContainerWrite;
 use futures::{io::WriteHalf, AsyncWrite, StreamExt};
-use log::trace;
+use log::{debug, trace};
 
 impl super::Worker {
 	pub fn writer(
@@ -24,6 +24,7 @@ impl super::Worker {
 	) -> JoinHandle<Result<()>> {
 		task::spawn(async move {
 			while let Some(pkt) = req_r.next().await {
+				debug!("[{}] sending {} ({})", self.name, pkt.name(), pkt.id());
 				pkt.send(&mut gear_write).await?;
 			}
 

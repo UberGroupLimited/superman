@@ -47,6 +47,30 @@ impl Packet {
 		pkt.update()?;
 		Ok(pkt)
 	}
+
+	pub(crate) fn id(&self) -> u32 {
+		match self {
+			Packet {
+				request: Some(r), ..
+			} => r.id(),
+			Packet {
+				response: Some(r), ..
+			} => r.id(),
+			_ => 0,
+		}
+	}
+
+	pub(crate) fn name(&self) -> &'static str {
+		match self {
+			Packet {
+				request: Some(r), ..
+			} => r.name(),
+			Packet {
+				response: Some(r), ..
+			} => r.name(),
+			_ => "UNKNOWN",
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
@@ -133,6 +157,21 @@ impl Request {
 		}
 	}
 
+	pub(crate) fn name(&self) -> &'static str {
+		match self {
+			Self::SetClientId { .. } => "SET_CLIENT_ID",
+			Self::CanDo { .. } => "CAN_DO",
+			Self::CantDo { .. } => "CANT_DO",
+			Self::PreSleep => "PRE_SLEEP",
+			Self::GrabJobUniq => "GRAB_JOB_UNIQ",
+			Self::WorkStatus { .. } => "WORK_STATUS",
+			Self::WorkComplete { .. } => "WORK_COMPLETE",
+			Self::WorkFail { .. } => "WORK_FAIL",
+			Self::WorkException { .. } => "WORK_EXCEPTION",
+			Self::WorkData { .. } => "WORK_DATA",
+		}
+	}
+
 	pub(crate) fn bytes(&self) -> usize {
 		let mut buf = BitVec::new();
 		self.write(&mut buf, (0, 0)).unwrap();
@@ -166,6 +205,14 @@ impl Response {
 			Self::Noop => 6,
 			Self::NoJob => 10,
 			Self::JobAssignUniq { .. } => 31,
+		}
+	}
+
+	pub(crate) fn name(&self) -> &'static str {
+		match self {
+			Self::Noop => "NOOP",
+			Self::NoJob => "NO_JOB",
+			Self::JobAssignUniq { .. } => "JOB_ASSIGN_UNIQ",
 		}
 	}
 
