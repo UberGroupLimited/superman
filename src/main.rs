@@ -1,9 +1,9 @@
 use color_eyre::eyre::Result;
+use state::State;
 use structopt::StructOpt;
-use worker::State;
 
 mod packet;
-mod worker;
+mod state;
 
 #[derive(StructOpt, Debug)]
 struct Args {
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
         .init()?;
 
     let state = State::create(args.connect).await?;
-    state.worker("supertest", "/usr/bin/true", 1).await?;
+    state.start_worker("supertest", "/usr/bin/true", 1).await?;
 
     Ok(())
 }

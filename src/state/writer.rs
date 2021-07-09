@@ -16,7 +16,7 @@ use deku::DekuContainerWrite;
 use futures::{io::WriteHalf, AsyncWrite, StreamExt};
 use log::trace;
 
-impl super::State {
+impl super::Worker {
     pub fn writer(
         self: Arc<Self>,
         mut gear_write: WriteHalf<TcpStream>,

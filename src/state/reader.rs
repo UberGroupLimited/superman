@@ -12,7 +12,7 @@ use deku::{prelude::DekuError, DekuContainerRead};
 use futures::io::ReadHalf;
 use log::{debug, trace, warn};
 
-impl super::State {
+impl super::Worker {
     pub fn reader(
         self: Arc<Self>,
         mut gear_read: ReadHalf<TcpStream>,
@@ -44,10 +44,7 @@ impl super::State {
                                 debug!("got a job assignment");
                                 res_s.send(res).await?;
                             } else if let Some(Response::Noop) = pkt.response {
-                                // TODO: obviously check *this function's* state
-                                if self.workload.load(Ordering::Relaxed)
-                                    < self.concurrency.load(Ordering::Relaxed)
-                                {
+                                if self.current_load.load(Ordering::Relaxed) < self.concurrency {
                                     debug!("got a noop, asking for work");
                                     req_s.send(Request::GrabJobUniq).await?;
                                 } else {

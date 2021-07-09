@@ -12,7 +12,7 @@ use color_eyre::eyre::Result;
 use futures::StreamExt;
 use log::{debug, error};
 
-impl super::State {
+impl super::Worker {
     pub fn assignee(
         self: Arc<Self>,
         mut res_r: Receiver<Response>,
@@ -40,9 +40,7 @@ impl super::State {
                         workload.len()
                     );
 
-                    if self.workload.fetch_add(1, Ordering::Relaxed) + 1
-                        < self.concurrency.load(Ordering::Relaxed)
-                    {
+                    if self.current_load.fetch_add(1, Ordering::Relaxed) + 1 < self.concurrency {
                         debug!(
                             "[{}] can still do more work, asking",
                             String::from_utf8_lossy(&name),
@@ -64,8 +62,7 @@ impl super::State {
                             .await
                             .expect("wrap with a try");
 
-                        if this.workload.fetch_sub(1, Ordering::Relaxed) - 1
-                            < this.concurrency.load(Ordering::Relaxed)
+                        if this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
                         {
                             debug!(
                                 "[{}] can do more work now, asking",
