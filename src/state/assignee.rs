@@ -10,7 +10,7 @@ use async_std::{
 };
 use color_eyre::eyre::Result;
 use futures::StreamExt;
-use log::{debug, error};
+use log::{debug, error, warn};
 
 impl super::Worker {
 	pub fn assignee(
@@ -28,6 +28,26 @@ impl super::Worker {
 					workload,
 				} = pkt
 				{
+					match String::from_utf8(name) {
+						Ok(name) => {
+							if name.trim_end_matches('\0') != self.name {
+								error!(
+									"[{}] job delivered is for wrong function ({:?})",
+									self.name, name
+								);
+								continue;
+							}
+						}
+						Err(err) => {
+							warn!(
+								"[{}] job delivered has non-utf-8 function name, will not handle",
+								self.name
+							);
+							warn!("{}", err);
+							continue;
+						}
+					}
+
 					let handle_hex = hex::encode(&handle);
 
 					debug!(
