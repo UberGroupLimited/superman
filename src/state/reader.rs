@@ -5,7 +5,7 @@ use async_std::{
 	channel::Sender,
 	io::ReadExt,
 	net::TcpStream,
-	task::{self, JoinHandle},
+	task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::Result;
 use deku::{prelude::DekuError, DekuContainerRead};
@@ -19,7 +19,7 @@ impl super::Worker {
 		res_s: Sender<Response>,
 		req_s: Sender<Request>,
 	) -> JoinHandle<Result<()>> {
-		task::spawn(async move {
+		spawn(async move {
 			let mut packet = Vec::with_capacity(1024);
 			'recv: loop {
 				trace!("[{}] waiting for data", self.name);

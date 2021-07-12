@@ -1,12 +1,11 @@
 use std::{
 	sync::{atomic::Ordering, Arc},
-	time::Duration,
 };
 
 use crate::packet::{Request, Response};
 use async_std::{
 	channel::{Receiver, Sender},
-	task::{self, sleep, JoinHandle},
+	task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::Result;
 use futures::StreamExt;
@@ -18,7 +17,7 @@ impl super::Worker {
 		mut res_r: Receiver<Response>,
 		req_s: Sender<Request>,
 	) -> JoinHandle<Result<()>> {
-		task::spawn(async move {
+		spawn(async move {
 			while let Some(pkt) = res_r.next().await {
 				dbg!(&pkt);
 				if let Response::JobAssignUniq {
@@ -65,32 +64,13 @@ impl super::Worker {
 						req_s.send(Request::PreSleep).await?;
 					}
 
-					let this = self.clone();
-					let req_s = req_s.clone();
-					task::spawn(async move {
-						sleep(Duration::from_secs(4)).await;
-
-						debug!(
-							"[{}] [{}] work done, sending complete",
-							this.name, &handle_hex
-						);
-						req_s
-							.send(Request::WorkComplete {
-								handle,
-								data: br#"{"error":null,"data":null}"#.to_vec(),
-							})
-							.await
-							.expect("wrap with a try");
-
-						if this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
-						{
-							debug!("[{}] can do more work now, asking", this.name);
-							req_s
-								.send(Request::PreSleep)
-								.await
-								.expect("wrap with a try");
-						}
-					});
+					self.clone().run_order(
+						req_s.clone(),
+						format!("[{}] [{}]", self.name, &handle_hex),
+						handle,
+						unique,
+						workload,
+					);
 				} else {
 					error!("[{}] assignee got unexpected packet: {:?}", self.name, pkt);
 				}

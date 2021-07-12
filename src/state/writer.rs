@@ -9,7 +9,7 @@ use async_std::{
 	channel::Receiver,
 	net::TcpStream,
 	prelude::*,
-	task::{self, JoinHandle},
+	task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::Result;
 use deku::DekuContainerWrite;
@@ -22,7 +22,7 @@ impl super::Worker {
 		mut gear_write: WriteHalf<TcpStream>,
 		mut req_r: Receiver<Request>,
 	) -> JoinHandle<Result<()>> {
-		task::spawn(async move {
+		spawn(async move {
 			while let Some(pkt) = req_r.next().await {
 				debug!("[{}] sending {} ({})", self.name, pkt.name(), pkt.id());
 				pkt.send(&mut gear_write).await?;

@@ -13,6 +13,7 @@ use log::info;
 pub(self) use worker::Worker;
 
 mod assignee;
+mod order;
 mod reader;
 mod worker;
 mod writer;
