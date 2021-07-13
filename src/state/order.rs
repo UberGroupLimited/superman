@@ -2,7 +2,8 @@ use std::{sync::Arc, time::Duration};
 
 use crate::packet::Request;
 use async_std::{channel::Sender, task::sleep};
-use log::debug;
+use color_eyre::eyre::Result;
+use log::{debug, error};
 
 #[derive(Clone, Debug)]
 pub struct Order {
@@ -36,6 +37,16 @@ impl super::Worker {
 
 impl Order {
 	pub async fn run(self: Arc<Self>, req_s: Sender<Request>) {
+		if let Err(err) = self.inner(req_s).await {
+			error!(
+				"{} running order errored (not the workload itself)",
+				self.log_prefix
+			);
+			error!("{} {}", self.log_prefix, err);
+		}
+	}
+
+	async fn inner(&self, req_s: Sender<Request>) -> Result<()> {
 		debug!("{} starting order", self.log_prefix);
 
 		sleep(Duration::from_secs(4)).await;
@@ -47,7 +58,8 @@ impl Order {
 				handle: self.handle.clone(),
 				data: br#"{"error":null,"data":null}"#.to_vec(),
 			})
-			.await
-			.expect("wrap with a try");
+			.await?;
+
+		Ok(())
 	}
 }
