@@ -13,6 +13,7 @@ use color_eyre::eyre::Result;
 use futures::io::AsyncReadExt;
 use log::debug;
 
+#[derive(Debug)]
 pub struct Worker {
 	pub name: String,
 	pub executor: PathBuf,

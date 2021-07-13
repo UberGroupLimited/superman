@@ -1,6 +1,4 @@
-use std::{
-	sync::{atomic::Ordering, Arc},
-};
+use std::sync::{atomic::Ordering, Arc};
 
 use crate::packet::{Request, Response};
 use async_std::{
@@ -8,7 +6,7 @@ use async_std::{
 	task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::Result;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use log::{debug, error, warn};
 
 impl super::Worker {
@@ -47,30 +45,27 @@ impl super::Worker {
 						}
 					}
 
-					let handle_hex = hex::encode(&handle);
-
-					debug!(
-						"[{}] [{}] handling job unique={:?} workload bytes={}",
-						self.name,
-						&handle_hex,
-						std::str::from_utf8(&unique)
-							.map(|s| s.to_owned())
-							.unwrap_or_else(|_| hex::encode(&unique)),
-						workload.len()
-					);
-
 					if self.current_load.fetch_add(1, Ordering::Relaxed) + 1 < self.concurrency {
 						debug!("[{}] can still do more work, asking", self.name,);
 						req_s.send(Request::PreSleep).await?;
 					}
 
-					self.clone().run_order(
-						req_s.clone(),
-						format!("[{}] [{}]", self.name, &handle_hex),
-						handle,
-						unique,
-						workload,
-					);
+					let order = self
+						.clone()
+						.order(handle, unique, workload)
+						.run(req_s.clone());
+					let this = self.clone();
+					let req_ss = req_s.clone();
+					spawn(order.then(|_| async move {
+						if this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
+						{
+							debug!("[{}] can do more work now, asking", this.name);
+							req_ss
+								.send(Request::PreSleep)
+								.await
+								.expect("wrap with a try");
+						}
+					}));
 				} else {
 					error!("[{}] assignee got unexpected packet: {:?}", self.name, pkt);
 				}
