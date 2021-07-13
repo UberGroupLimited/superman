@@ -2,6 +2,7 @@ use std::{
 	ffi::OsString,
 	os::unix::ffi::OsStringExt,
 	sync::{
+		atomic::{AtomicBool, Ordering::SeqCst},
 		Arc,
 	},
 	time::Duration,
@@ -84,9 +85,12 @@ impl Order {
 
 		debug!("{} spawned order pid={}", self.log_prefix, cmd.id());
 
+		let sent_complete = Arc::new(AtomicBool::new(false));
+
 		let reader = spawn(
 			self.clone().reader(
 				req_s.clone(),
+				sent_complete.clone(),
 				cmd.stdout
 					.take()
 					.ok_or_else(|| eyre!("missing stdout for command"))?,
@@ -134,12 +138,13 @@ impl Order {
 			Some(s) => {
 				warn!("{} order exited with code={:?}", self.log_prefix, s);
 
-		req_s
+				req_s
 					.send(self.exception(format!(
 						r#"{{"error":"order process exited with code={:?}"}}"#,
 						s
 					)))
 					.await?;
+				sent_complete.store(true, SeqCst);
 			}
 			None => {
 				warn!(
@@ -152,17 +157,29 @@ impl Order {
 						r#"{{"error":"order timed out after duration={:?}"}}"#,
 						self.timeout
 					)))
-			.await?;
+					.await?;
+				sent_complete.store(true, SeqCst);
 			}
 		};
 
+		if sent_complete.load(SeqCst) {
+			debug!("{} order done, complete already sent", self.log_prefix);
+		} else {
+			debug!("{} order done, sending empty complete", self.log_prefix);
+			req_s.send(self.complete([])).await?;
+		}
 
 		reader.await?;
 
 		Ok(())
 	}
 
-	async fn reader(self: Arc<Self>, _req_s: Sender<Request>, stdout: ChildStdout) -> Result<()> {
+	async fn reader(
+		self: Arc<Self>,
+		_req_s: Sender<Request>,
+		_sent_complete: Arc<AtomicBool>,
+		stdout: ChildStdout,
+	) -> Result<()> {
 		let stdout = BufReader::new(stdout);
 		let mut lines = stdout.lines();
 		while let Some(line) = lines.next().await {
