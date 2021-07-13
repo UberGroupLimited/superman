@@ -84,7 +84,21 @@ impl Order {
 
 		trace!("{} installed stdout reader", self.log_prefix);
 
-		debug!("{} order done, sending complete", self.log_prefix);
+		{
+			let mut stdin = cmd
+				.stdin
+				.take()
+				.ok_or_else(|| eyre!("missing stdin for command"))?;
+			trace!("{} writing workload to stdin", self.log_prefix);
+			stdin.write_all(self.workload.as_slice()).await?;
+			trace!("{} closing stdin", self.log_prefix);
+			stdin.close().await?;
+			debug!(
+				"{} wrote workload bytes={} to stdin",
+				self.log_prefix,
+				self.workload.len()
+			);
+		}
 
 		req_s
 			.send(Request::WorkComplete {
