@@ -32,7 +32,7 @@ impl State {
 			.to_socket_addrs()
 			.await?
 			.next()
-			.ok_or(eyre!("no server addr provided"))?;
+			.ok_or_else(|| eyre!("no server addr provided"))?;
 
 		let base_id = format!(
 			"{}::v{}::{}",

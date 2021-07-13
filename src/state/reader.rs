@@ -64,7 +64,6 @@ impl super::Worker {
 						Err(DekuError::Parse(msg)) => {
 							if msg.contains("not enough data") {
 								debug!("[{}] got partial packet, waiting for more", self.name);
-								continue 'recv;
 							} else {
 								warn!(
 									"[{}] bad packet, throwing away {} bytes",
@@ -72,8 +71,9 @@ impl super::Worker {
 									packet.len()
 								);
 								warn!("[{}] parsing error: {}", self.name, msg);
-								continue 'recv;
 							}
+
+							continue 'recv;
 						}
 						Err(err) => {
 							warn!(

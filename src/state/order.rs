@@ -74,7 +74,7 @@ impl Order {
 
 		let mut cmd = Command::new(&self.executor)
 			.kill_on_drop(true)
-			.current_dir(self.executor.parent().unwrap_or(Path::new("/tmp")))
+			.current_dir(self.executor.parent().unwrap_or_else(|| Path::new("/tmp")))
 			.stdin(Stdio::piped())
 			.stdout(Stdio::piped())
 			.stderr(Stdio::inherit())
