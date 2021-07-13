@@ -121,4 +121,18 @@ impl Order {
 
 		Ok(())
 	}
+
+	fn exception(&self, data: impl Into<Vec<u8>>) -> Request {
+		Request::WorkException {
+			handle: self.handle.clone(),
+			data: data.into(),
+		}
+	}
+
+	fn complete(&self, data: impl Into<Vec<u8>>) -> Request {
+		Request::WorkComplete {
+			handle: self.handle.clone(),
+			data: data.into(),
+		}
+	}
 }
