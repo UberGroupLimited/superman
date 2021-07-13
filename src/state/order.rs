@@ -1,22 +1,32 @@
-use std::{ffi::OsString, os::unix::ffi::OsStringExt, sync::Arc, time::Duration};
+use std::{
+	ffi::OsString,
+	os::unix::ffi::OsStringExt,
+	sync::{
+		Arc,
+	},
+	time::Duration,
+};
 
 use crate::packet::Request;
 use async_std::{
 	channel::Sender,
-	io::{prelude::*, BufReader},
+	io::{timeout, BufReader},
 	path::{Path, PathBuf},
 	process::{ChildStdout, Command, Stdio},
-	task::{sleep, spawn},
+	task::spawn,
 };
 use color_eyre::eyre::{eyre, Result};
-use futures::StreamExt;
-use log::{debug, error, trace};
+use futures::{AsyncBufReadExt, AsyncWriteExt, StreamExt};
+use log::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
 pub struct Order {
 	pub log_prefix: String,
+
 	pub name: String,
 	pub executor: PathBuf,
+	pub timeout: Duration,
+
 	pub handle: Vec<u8>,
 	pub unique: OsString,
 	pub workload: Vec<u8>,
@@ -39,6 +49,7 @@ impl super::Worker {
 			log_prefix,
 			name: self.name.clone(),
 			executor: self.executor.clone(),
+			timeout: Duration::from_secs(120), // TODO
 			handle,
 			unique,
 			workload,
@@ -100,12 +111,51 @@ impl Order {
 			);
 		}
 
+		debug!(
+			"{} waiting on process completion, or timeout={:?}",
+			self.log_prefix, self.timeout
+		);
+
+		// Result is for the process behaviour (actual I/O errors, raise as superman errors),
+		// Option is for the timeout (report as order exception).
+		match timeout(self.timeout, cmd.status())
+			.await
+			.map(Some)
+			.or_else(|err| {
+				if let std::io::ErrorKind::TimedOut = err.kind() {
+					Ok(None)
+				} else {
+					Err(err)
+				}
+			})? {
+			Some(s) if s.success() => {
+				debug!("{} order exited with success", self.log_prefix);
+			}
+			Some(s) => {
+				warn!("{} order exited with code={:?}", self.log_prefix, s);
+
 		req_s
-			.send(Request::WorkComplete {
-				handle: self.handle.clone(),
-				data: br#"{"error":null,"data":null}"#.to_vec(),
-			})
+					.send(self.exception(format!(
+						r#"{{"error":"order process exited with code={:?}"}}"#,
+						s
+					)))
+					.await?;
+			}
+			None => {
+				warn!(
+					"{} order timed out after duration={:?}, killed",
+					self.log_prefix, self.timeout
+				);
+
+				req_s
+					.send(self.exception(format!(
+						r#"{{"error":"order timed out after duration={:?}"}}"#,
+						self.timeout
+					)))
 			.await?;
+			}
+		};
+
 
 		reader.await?;
 
