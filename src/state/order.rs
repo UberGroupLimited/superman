@@ -60,11 +60,7 @@ impl Order {
 	async fn inner(self: Arc<Self>, req_s: Sender<Request>) -> Result<()> {
 		debug!("{} starting order", self.log_prefix);
 
-		// const args = [name, task.uniqueid, '' + workload.length];
-		// tlog.debug({ executor: fn.executor, args }, 'spawning');
-		// const run = cp.execFile(fn.executor, args, workerOpts);
-
-		let cmd = Command::new(&self.executor)
+		let mut cmd = Command::new(&self.executor)
 			.kill_on_drop(true)
 			.current_dir(self.executor.parent().unwrap_or(Path::new("/tmp")))
 			.stdin(Stdio::piped())
@@ -81,11 +77,12 @@ impl Order {
 			self.clone().reader(
 				req_s.clone(),
 				cmd.stdout
+					.take()
 					.ok_or_else(|| eyre!("missing stdout for command"))?,
 			),
 		);
 
-		sleep(Duration::from_secs(4)).await;
+		trace!("{} installed stdout reader", self.log_prefix);
 
 		debug!("{} order done, sending complete", self.log_prefix);
 
