@@ -60,7 +60,7 @@ impl State {
 	}
 
 	pub fn start_worker(
-		self: Arc<Self>,
+		&self,
 		name: &str,
 		executor: impl AsRef<Path>,
 		concurrency: usize,

@@ -56,7 +56,7 @@ impl Worker {
 		let writer = self.clone().writer(gear_write, req_r);
 		let assignee = self.clone().assignee(res_r, req_s);
 
-		// try join or something
+		// TODO: try join or something
 		reader.await?;
 		writer.await?;
 		assignee.await?;
