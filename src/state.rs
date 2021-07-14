@@ -60,13 +60,15 @@ impl State {
 		name: &str,
 		executor: impl AsRef<Path>,
 		concurrency: usize,
+		timeout: Duration,
+	) {
 		let name = Arc::from(name.to_owned().into_boxed_str());
 		let wrk = Arc::new(Worker {
 			name: Arc::clone(&name),
 			executor: executor.as_ref().into(),
 			concurrency,
+			timeout,
 			client_id: format!("{}::{}={}", self.base_id, name, concurrency),
-
 			current_load: AtomicUsize::new(0),
 			exit: AtomicBool::new(false),
 		});

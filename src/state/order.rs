@@ -50,7 +50,7 @@ impl super::Worker {
 			log_prefix,
 			name: self.name.clone(),
 			executor: self.executor.clone(),
-			timeout: Duration::from_secs(120), // TODO
+			timeout: self.timeout,
 			handle,
 			unique,
 			workload,

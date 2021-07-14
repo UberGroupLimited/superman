@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use color_eyre::eyre::Result;
 use state::State;
 use structopt::StructOpt;
@@ -38,7 +40,7 @@ async fn main() -> Result<()> {
 		.init()?;
 
 	let state = State::create(args.connect).await?;
-	state.start_worker("supertest", "/usr/bin/true", 1).await?;
+	state.start_worker("supertest", "/usr/bin/true", 1, Duration::from_secs(120));
 
 	Ok(())
 }

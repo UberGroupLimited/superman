@@ -1,6 +1,9 @@
-use std::sync::{
-	atomic::{AtomicBool, AtomicUsize},
-	Arc,
+use std::{
+	sync::{
+		atomic::{AtomicBool, AtomicUsize},
+		Arc,
+	},
+	time::Duration,
 };
 
 use crate::packet::Request;
@@ -18,8 +21,8 @@ pub struct Worker {
 	pub name: Arc<str>,
 	pub executor: PathBuf,
 	pub concurrency: usize,
+	pub timeout: Duration,
 	pub client_id: String,
-
 	pub current_load: AtomicUsize,
 	pub exit: AtomicBool,
 }
