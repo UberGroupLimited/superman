@@ -26,7 +26,7 @@ mod writer;
 #[derive(Debug)]
 pub struct State {
 	server: SocketAddr,
-	base_id: Arc<str>,
+	base_id: Box<str>,
 	workers: DashMap<Arc<str>, Arc<Worker>>,
 }
 
@@ -46,8 +46,7 @@ impl State {
 				.into_string()
 				.map_err(|s| eyre!("Hostname isn't UTF-8: {:?}", s))?
 		)
-		.into_boxed_str()
-		.into();
+		.into_boxed_str();
 
 		info!("preparing superman");
 		info!("gearman server = {}", server);
