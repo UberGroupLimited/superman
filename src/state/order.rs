@@ -12,7 +12,7 @@ use crate::packet::Request;
 use async_std::{
 	channel::Sender,
 	io::{timeout, BufReader},
-	path::{Path, PathBuf},
+	path::Path,
 	process::{ChildStdout, Command, Stdio},
 	task::spawn,
 };
@@ -25,7 +25,7 @@ pub struct Order {
 	pub log_prefix: String,
 
 	pub name: Arc<str>,
-	pub executor: PathBuf,
+	pub executor: Arc<Path>,
 	pub timeout: Duration,
 
 	pub handle: Vec<u8>,
@@ -72,7 +72,7 @@ impl Order {
 	async fn inner(self: Arc<Self>, req_s: Sender<Request>) -> Result<()> {
 		debug!("{} starting order", self.log_prefix);
 
-		let mut cmd = Command::new(&self.executor)
+		let mut cmd = Command::new(self.executor.as_ref())
 			.kill_on_drop(true)
 			.current_dir(self.executor.parent().unwrap_or_else(|| Path::new("/tmp")))
 			.stdin(Stdio::piped())

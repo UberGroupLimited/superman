@@ -10,7 +10,7 @@ use crate::packet::Request;
 use async_std::{
 	channel::bounded,
 	net::{SocketAddr, TcpStream},
-	path::PathBuf,
+	path::Path,
 };
 use color_eyre::eyre::Result;
 use futures::io::AsyncReadExt;
@@ -19,7 +19,7 @@ use log::debug;
 #[derive(Debug)]
 pub struct Worker {
 	pub name: Arc<str>,
-	pub executor: PathBuf,
+	pub executor: Arc<Path>,
 	pub concurrency: usize,
 	pub timeout: Duration,
 	pub client_id: String,
