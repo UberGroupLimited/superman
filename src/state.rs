@@ -1,6 +1,6 @@
 use std::{
 	sync::{
-		atomic::{AtomicBool, AtomicUsize},
+		atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
 		Arc,
 	},
 	time::Duration,
@@ -81,5 +81,13 @@ impl State {
 
 		self.workers.insert(name, wrk.clone());
 		spawn(wrk.run(self.server));
+	}
+
+	pub fn stop_worker(&self, name: &str) {
+		if let Some(wrk) = self.workers.get(name) {
+			wrk.exit.store(true, Relaxed);
+			// worker will clean up after itself
+			// TODO: ^ do that
+		}
 	}
 }
