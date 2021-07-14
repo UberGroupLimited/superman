@@ -1,13 +1,18 @@
-use std::sync::{
-	atomic::{AtomicBool, AtomicUsize},
-	Arc,
+use std::{
+	sync::{
+		atomic::{AtomicBool, AtomicUsize},
+		Arc,
+	},
+	time::Duration,
 };
 
 use async_std::{
 	net::{SocketAddr, ToSocketAddrs},
 	path::Path,
+	task::spawn,
 };
 use color_eyre::eyre::{eyre, Result};
+use dashmap::DashMap;
 use log::info;
 
 pub(self) use worker::Worker;
@@ -22,8 +27,7 @@ mod writer;
 pub struct State {
 	server: SocketAddr,
 	base_id: String,
-	workload: AtomicUsize,
-	concurrency: AtomicUsize,
+	workers: DashMap<Arc<str>, Arc<Worker>>,
 }
 
 impl State {
@@ -50,12 +54,11 @@ impl State {
 		Ok(Arc::new(Self {
 			server,
 			base_id,
-			workload: AtomicUsize::new(0),
-			concurrency: AtomicUsize::new(0),
+			workers: DashMap::new(),
 		}))
 	}
 
-	pub async fn start_worker(
+	pub fn start_worker(
 		self: Arc<Self>,
 		name: &str,
 		executor: impl AsRef<Path>,
@@ -72,10 +75,8 @@ impl State {
 			current_load: AtomicUsize::new(0),
 			exit: AtomicBool::new(false),
 		});
-		// TODO: insert into state
 
-		// TODO: spawn instead
-		wrk.run(self.server).await?;
-		Ok(())
+		self.workers.insert(name, wrk.clone());
+		spawn(wrk.run(self.server));
 	}
 }
