@@ -27,7 +27,7 @@ impl super::Worker {
 				{
 					match String::from_utf8(name) {
 						Ok(name) => {
-							if name.trim_end_matches('\0') != self.name {
+							if name.trim_end_matches('\0') != self.name.as_ref() {
 								error!(
 									"[{}] job delivered is for wrong function ({:?})",
 									self.name, name

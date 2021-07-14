@@ -15,7 +15,7 @@ use log::debug;
 
 #[derive(Debug)]
 pub struct Worker {
-	pub name: String,
+	pub name: Arc<str>,
 	pub executor: PathBuf,
 	pub concurrency: usize,
 	pub client_id: String,

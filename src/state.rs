@@ -60,9 +60,9 @@ impl State {
 		name: &str,
 		executor: impl AsRef<Path>,
 		concurrency: usize,
-	) -> Result<()> {
+		let name = Arc::from(name.to_owned().into_boxed_str());
 		let wrk = Arc::new(Worker {
-			name: name.into(),
+			name: Arc::clone(&name),
 			executor: executor.as_ref().into(),
 			concurrency,
 			client_id: format!("{}::{}={}", self.base_id, name, concurrency),

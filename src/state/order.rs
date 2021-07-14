@@ -24,7 +24,7 @@ use log::{debug, error, trace, warn};
 pub struct Order {
 	pub log_prefix: String,
 
-	pub name: String,
+	pub name: Arc<str>,
 	pub executor: PathBuf,
 	pub timeout: Duration,
 
@@ -78,7 +78,7 @@ impl Order {
 			.stdin(Stdio::piped())
 			.stdout(Stdio::piped())
 			.stderr(Stdio::inherit())
-			.arg(&self.name)
+			.arg(self.name.as_ref())
 			.arg(&self.unique)
 			.arg(self.workload.len().to_string())
 			.spawn()?;
