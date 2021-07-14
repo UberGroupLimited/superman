@@ -26,7 +26,7 @@ mod writer;
 #[derive(Debug)]
 pub struct State {
 	server: SocketAddr,
-	base_id: String,
+	base_id: Arc<str>,
 	workers: DashMap<Arc<str>, Arc<Worker>>,
 }
 
@@ -45,7 +45,9 @@ impl State {
 			hostname::get()?
 				.into_string()
 				.map_err(|s| eyre!("Hostname isn't UTF-8: {:?}", s))?
-		);
+		)
+		.into_boxed_str()
+		.into();
 
 		info!("preparing superman");
 		info!("gearman server = {}", server);
@@ -71,7 +73,9 @@ impl State {
 			executor: executor.as_ref().into(),
 			concurrency,
 			timeout,
-			client_id: format!("{}::{}={}", self.base_id, name, concurrency),
+			client_id: format!("{}::{}={}", self.base_id, name, concurrency)
+				.into_boxed_str()
+				.into(),
 			current_load: AtomicUsize::new(0),
 			exit: AtomicBool::new(false),
 		});

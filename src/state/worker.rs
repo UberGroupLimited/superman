@@ -22,7 +22,7 @@ pub struct Worker {
 	pub executor: Arc<Path>,
 	pub concurrency: usize,
 	pub timeout: Duration,
-	pub client_id: String,
+	pub client_id: Arc<str>,
 	pub current_load: AtomicUsize,
 	pub exit: AtomicBool,
 }
