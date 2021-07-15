@@ -1,9 +1,18 @@
 [package]
 name = "fuze"
 version = "1.0.0"
+
 authors = ["Félix Saparelli <felix@passcod.name>"]
-edition = "2018"
 license = "Apache-2.0 OR MIT"
+description = "A mechanism to wait for a single signal which can be checked at any time"
+keywords = ["signal", "fuse", "channel", "async", "once"]
+
+documentation = "https://docs.rs/fuze"
+homepage = "https://github.com/passcod/superman/tree/main/fuze"
+repository = "https://github.com/passcod/superman/tree/main/fuze"
+readme = "README.md"
+
+edition = "2018"
 
 [dependencies]
 async-std = { version = "1.9.0" }
