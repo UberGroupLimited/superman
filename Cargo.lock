@@ -559,6 +559,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuze"
+version = "1.0.0"
+dependencies = [
+ "async-std",
+]
+
+[[package]]
 name = "gimli"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -997,6 +1004,7 @@ dependencies = [
  "dashmap",
  "deku",
  "futures",
+ "fuze",
  "hex",
  "hostname",
  "log",
