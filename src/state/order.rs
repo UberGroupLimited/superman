@@ -135,11 +135,15 @@ impl Order {
 				debug!("{} order exited with success", self.log_prefix);
 			}
 			Ok(s) => {
-				warn!("{} order exited with code={:?}", self.log_prefix, s);
+				warn!(
+					"{} order exited with code={}",
+					self.log_prefix,
+					s.code().unwrap_or(-1)
+				);
 
 				self.exception(format!(
-					r#"{{"error":"order process exited with code={:?}"}}"#,
-					s
+					r#"{{"error":"order process exited with code={}"}}"#,
+					s.code().unwrap_or(-1)
 				))
 				.await?;
 			}
@@ -185,6 +189,7 @@ impl Order {
 		Ok(())
 	}
 
+	// TODO: influx stat calls
 	async fn read_line(self: Arc<Self>, line: Result<String>) -> Result<()> {
 		let line = line?;
 		trace!("{} line from stdout: {}", self.log_prefix, line);
