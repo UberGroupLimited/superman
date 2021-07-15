@@ -18,7 +18,7 @@ use async_std::{
 };
 use color_eyre::eyre::{eyre, Result};
 use futures::{AsyncBufReadExt, AsyncWriteExt, StreamExt};
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 
 #[derive(Debug)]
 pub struct Order {
@@ -84,7 +84,10 @@ impl Order {
 	}
 
 	async fn inner(self: Arc<Self>) -> Result<()> {
-		debug!("{} starting order", self.log_prefix);
+		info!(
+			"{} starting order unique={:?}",
+			self.log_prefix, self.unique
+		);
 
 		let mut cmd = Command::new(self.executor.as_ref())
 			.kill_on_drop(true)
@@ -172,6 +175,11 @@ impl Order {
 		}
 
 		reader.await?;
+
+		info!(
+			"{} done with order unique={:?}",
+			self.log_prefix, self.unique
+		);
 
 		Ok(())
 	}

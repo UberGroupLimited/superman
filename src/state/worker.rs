@@ -32,7 +32,10 @@ impl Worker {
 		debug!("[{}] connecting to gearman", self.name);
 		let mut gear = TcpStream::connect(server).await?;
 
-		debug!("naming ourself client_id={:?}", &self.client_id);
+		debug!(
+			"[{}] naming ourself client_id={:?}",
+			self.name, &self.client_id
+		);
 		let client_id = self.client_id.as_bytes().to_vec();
 		Request::SetClientId { id: client_id }
 			.send(&mut gear)
