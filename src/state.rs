@@ -1,8 +1,5 @@
 use std::{
-	sync::{
-		atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
-		Arc,
-	},
+	sync::{atomic::AtomicUsize, Arc},
 	time::Duration,
 };
 
@@ -85,7 +82,7 @@ impl State {
 				.into_boxed_str()
 				.into(),
 			current_load: AtomicUsize::new(0),
-			exit: AtomicBool::new(false),
+			exit: Fuze::new(),
 		});
 
 		info!("[{}] creating worker instance", name);
@@ -93,11 +90,13 @@ impl State {
 		spawn(wrk.run(self.server));
 	}
 
-	pub fn stop_worker(&self, name: &str) {
+	pub async fn stop_worker(&self, name: &str) -> Result<()> {
 		if let Some(wrk) = self.workers.get(name) {
-			wrk.exit.store(true, Relaxed);
+			wrk.exit.burn().await?;
 			// worker will clean up after itself
 			// TODO: ^ do that
 		}
+
+		Ok(())
 	}
 }

@@ -1,8 +1,5 @@
 use std::{
-	sync::{
-		atomic::{AtomicBool, AtomicUsize},
-		Arc,
-	},
+	sync::{atomic::AtomicUsize, Arc},
 	time::Duration,
 };
 
@@ -14,6 +11,7 @@ use async_std::{
 };
 use color_eyre::eyre::Result;
 use futures::io::AsyncReadExt;
+use fuze::Fuze;
 use log::debug;
 
 #[derive(Debug)]
@@ -24,7 +22,7 @@ pub struct Worker {
 	pub timeout: Duration,
 	pub client_id: Arc<str>,
 	pub current_load: AtomicUsize,
-	pub exit: AtomicBool,
+	pub exit: Fuze,
 }
 
 impl Worker {
