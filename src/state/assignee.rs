@@ -1,6 +1,6 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use crate::packet::{Request, Response};
+use crate::protocols::gearman::{Request, Response};
 use async_std::{
 	channel::{Receiver, Sender},
 	task::{spawn, JoinHandle},

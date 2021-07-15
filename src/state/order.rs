@@ -8,7 +8,7 @@ use std::{
 	time::Duration,
 };
 
-use crate::packet::Request;
+use crate::protocols::gearman::Request;
 use async_std::{
 	channel::Sender,
 	io::{timeout, BufReader},

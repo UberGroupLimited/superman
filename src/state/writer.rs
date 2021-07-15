@@ -4,7 +4,7 @@ use std::{
 	sync::Arc,
 };
 
-use crate::packet::{Packet, Request};
+use crate::protocols::gearman::{Packet, Request};
 use async_std::{
 	channel::Receiver,
 	net::TcpStream,

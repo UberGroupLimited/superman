@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 use state::State;
 use structopt::StructOpt;
 
-mod packet;
+mod protocols;
 mod state;
 
 #[derive(StructOpt, Debug)]
