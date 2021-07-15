@@ -7,13 +7,13 @@ use std::{
 };
 
 use async_std::{
-	channel::{bounded, Receiver, Sender},
 	net::{SocketAddr, ToSocketAddrs},
 	path::Path,
 	task::spawn,
 };
 use color_eyre::eyre::{eyre, Result};
 use dashmap::DashMap;
+use fuze::Fuze;
 use log::{info, trace};
 
 pub(self) use worker::Worker;
@@ -29,7 +29,7 @@ pub struct State {
 	server: SocketAddr,
 	base_id: Box<str>,
 	workers: DashMap<Arc<str>, Arc<Worker>>,
-	stop_now: (Sender<()>, Receiver<()>),
+	running: Fuze,
 }
 
 impl State {
@@ -58,14 +58,13 @@ impl State {
 			server,
 			base_id,
 			workers: DashMap::new(),
-			stop_now: bounded(1),
+			running: Fuze::new(),
 		}))
 	}
 
 	pub async fn wait(self: Arc<Self>) -> Result<()> {
-		trace!("waiting for death");
-		self.stop_now.1.recv().await?;
-		trace!("dying now");
+		self.running.wait().await?;
+		trace!("not running anymore");
 		Ok(())
 	}
 
