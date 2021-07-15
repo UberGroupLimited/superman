@@ -8,7 +8,7 @@ use std::{
 	time::Duration,
 };
 
-use crate::protocols::gearman::Request;
+use crate::protocols::{gearman::Request, order};
 use async_std::{
 	channel::Sender,
 	io::{timeout, BufReader},
@@ -37,7 +37,13 @@ pub struct Order {
 }
 
 impl super::Worker {
-	pub fn order(&self, handle: Vec<u8>, unique: Vec<u8>, workload: Vec<u8>, req_s: Sender<Request>) -> Arc<Order> {
+	pub fn order(
+		&self,
+		handle: Vec<u8>,
+		unique: Vec<u8>,
+		workload: Vec<u8>,
+		req_s: Sender<Request>,
+	) -> Arc<Order> {
 		let log_prefix = format!("[{}] [{}]", self.name, hex::encode(&handle));
 
 		let unique = OsString::from_vec(unique);
@@ -134,7 +140,8 @@ impl Order {
 				self.exception(format!(
 					r#"{{"error":"order process exited with code={:?}"}}"#,
 					s
-				)).await?;
+				))
+				.await?;
 			}
 			Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut) => {
 				warn!(
@@ -145,7 +152,8 @@ impl Order {
 				self.exception(format!(
 					r#"{{"error":"order timed out after duration={:?}"}}"#,
 					self.timeout
-				)).await?;
+				))
+				.await?;
 			}
 			Err(e) => {
 				return Err(e.into());
@@ -164,71 +172,121 @@ impl Order {
 		Ok(())
 	}
 
-	async fn reader(
-		self: Arc<Self>,
-		stdout: ChildStdout,
-	) -> Result<()> {
+	async fn reader(self: Arc<Self>, stdout: ChildStdout) -> Result<()> {
 		let stdout = BufReader::new(stdout);
 		let mut lines = stdout.lines();
 		while let Some(line) = lines.next().await {
-			trace!("{} line from stdout: {:?}", self.log_prefix, line?);
+			let line = line.map_err(|e| e.into());
+			if let Err(err) = self.clone().read_line(line).await {
+				error!("{} while handling stdout line: {}", self.log_prefix, err);
+			}
 		}
 
-		// try {
-		// 	const data = JSON.parse(line);
-		// 	switch (data.type) {
-		// 		case 'complete':
-		// 			tlog.debug('stdout got completion');
-		// 			tlog.trace({ data }, 'completion');
-		// 			delete data.type;
-		// 			task.end(JSON.stringify(data || {}));
-		// 			run.removeAllListeners();
-		// 			stat(data.error ? 'errored' : 'finished', new Date - start).catch(ohno);
-		// 			resolve();
-		// 		break;
+		Ok(())
+	}
 
-		// 		case 'update':
-		// 			tlog.debug('stdout got update');
-		// 			tlog.trace({ data }, 'update');
-		// 			task.update(JSON.stringify(data.data));
-		// 		break;
+	async fn read_line(self: Arc<Self>, line: Result<String>) -> Result<()> {
+		let line = line?;
+		trace!("{} line from stdout: {}", self.log_prefix, line);
 
-		// 		case 'progress':
-		// 			const { numerator, denominator } = data;
-		// 			tlog.debug({ numerator, denominator }, 'stdout got progress');
-		// 			task.progress(numerator, denominator);
-		// 		break;
+		let message = serde_json::from_str(&line)?;
+		trace!("{} stdout message {:?}", self.log_prefix, message);
 
-		// 		case 'print':
-		// 			tlog.debug('stdout got print');
-		// 			process.stderr.write(data.content);
-		// 		break;
-
-		// 		default:
-		// 			throw new Error(`unsupported event type: ${data.type}`);
-		// 	}
-		// } catch (err) {
-		// 	ohno(err);
-		// }
+		match message {
+			order::Message::Complete(order::Complete {
+				data,
+				error,
+				mut others,
+			}) => {
+				debug!("{} stdout got completion", self.log_prefix);
+				if !data.is_null() {
+					others.insert("data".into(), data);
+				}
+				if !error.is_null() {
+					others.insert("error".into(), error);
+				}
+				self.complete(serde_json::to_vec(&others)?).await?;
+			}
+			order::Message::Update(order::Update { data }) => {
+				debug!("{} stdout got update", self.log_prefix);
+				self.data(serde_json::to_vec(&data)?).await?;
+			}
+			order::Message::Progress(order::Progress {
+				numerator,
+				denominator,
+			}) => {
+				debug!("{} stdout got progress", self.log_prefix);
+				self.status(numerator, denominator).await?;
+			}
+			order::Message::Print(order::Print { content }) => {
+				debug!("{} stdout got print", self.log_prefix);
+				eprintln!("{}", content);
+			}
+		}
 
 		Ok(())
 	}
 
 	async fn exception(&self, data: impl Into<Vec<u8>>) -> Result<()> {
-		self.req_s.send(Request::WorkException {
-			handle: self.handle.clone(),
-			data: data.into(),
-		}).await?;
+		if self.sent_complete.load(SeqCst) {
+			return Ok(());
+		}
+
+		self.req_s
+			.send(Request::WorkException {
+				handle: self.handle.clone(),
+				data: data.into(),
+			})
+			.await?;
+
 		self.sent_complete.store(true, SeqCst);
 		Ok(())
 	}
 
 	async fn complete(&self, data: impl Into<Vec<u8>>) -> Result<()> {
-		self.req_s.send(Request::WorkComplete {
-			handle: self.handle.clone(),
-			data: data.into(),
-		}).await?;
+		if self.sent_complete.load(SeqCst) {
+			return Ok(());
+		}
+
+		self.req_s
+			.send(Request::WorkComplete {
+				handle: self.handle.clone(),
+				data: data.into(),
+			})
+			.await?;
+
 		self.sent_complete.store(true, SeqCst);
+		Ok(())
+	}
+
+	async fn data(&self, data: impl Into<Vec<u8>>) -> Result<()> {
+		if self.sent_complete.load(SeqCst) {
+			return Ok(());
+		}
+
+		self.req_s
+			.send(Request::WorkData {
+				handle: self.handle.clone(),
+				data: data.into(),
+			})
+			.await?;
+
+		Ok(())
+	}
+
+	async fn status(&self, numerator: isize, denominator: isize) -> Result<()> {
+		if self.sent_complete.load(SeqCst) {
+			return Ok(());
+		}
+
+		self.req_s
+			.send(Request::WorkStatus {
+				handle: self.handle.clone(),
+				numerator: numerator.to_string().into_bytes(),
+				denominator: denominator.to_string().into_bytes(),
+			})
+			.await?;
+
 		Ok(())
 	}
 }
