@@ -7,13 +7,14 @@ use std::{
 };
 
 use async_std::{
+	channel::{bounded, Receiver, Sender},
 	net::{SocketAddr, ToSocketAddrs},
 	path::Path,
 	task::spawn,
 };
 use color_eyre::eyre::{eyre, Result};
 use dashmap::DashMap;
-use log::info;
+use log::{info, trace};
 
 pub(self) use worker::Worker;
 
@@ -28,6 +29,7 @@ pub struct State {
 	server: SocketAddr,
 	base_id: Box<str>,
 	workers: DashMap<Arc<str>, Arc<Worker>>,
+	stop_now: (Sender<()>, Receiver<()>),
 }
 
 impl State {
@@ -56,7 +58,15 @@ impl State {
 			server,
 			base_id,
 			workers: DashMap::new(),
+			stop_now: bounded(1),
 		}))
+	}
+
+	pub async fn wait(self: Arc<Self>) -> Result<()> {
+		trace!("waiting for death");
+		self.stop_now.1.recv().await?;
+		trace!("dying now");
+		Ok(())
 	}
 
 	pub fn start_worker(
@@ -79,6 +89,7 @@ impl State {
 			exit: AtomicBool::new(false),
 		});
 
+		info!("[{}] creating worker instance", name);
 		self.workers.insert(name, wrk.clone());
 		spawn(wrk.run(self.server));
 	}

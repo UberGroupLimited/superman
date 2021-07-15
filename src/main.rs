@@ -40,7 +40,14 @@ async fn main() -> Result<()> {
 		.init()?;
 
 	let state = State::create(args.connect).await?;
-	state.start_worker("supertest", "/usr/bin/true", 1, Duration::from_secs(120));
+	state.start_worker(
+		"Test::sleep",
+		"/home/code/php/ucontrol/bin/run-order",
+		2,
+		Duration::from_secs(120),
+	);
+
+	state.wait().await?;
 
 	Ok(())
 }
