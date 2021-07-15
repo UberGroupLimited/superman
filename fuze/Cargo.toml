@@ -3,6 +3,7 @@ name = "fuze"
 version = "1.0.0"
 authors = ["Félix Saparelli <felix@passcod.name>"]
 edition = "2018"
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 async-std = { version = "1.9.0" }
