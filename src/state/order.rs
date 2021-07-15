@@ -20,7 +20,7 @@ use color_eyre::eyre::{eyre, Result};
 use futures::{AsyncBufReadExt, AsyncWriteExt, StreamExt};
 use log::{debug, error, trace, warn};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Order {
 	pub log_prefix: String,
 
@@ -31,10 +31,13 @@ pub struct Order {
 	pub handle: Vec<u8>,
 	pub unique: OsString,
 	pub workload: Vec<u8>,
+
+	pub req_s: Sender<Request>,
+	pub sent_complete: Arc<AtomicBool>,
 }
 
 impl super::Worker {
-	pub fn order(&self, handle: Vec<u8>, unique: Vec<u8>, workload: Vec<u8>) -> Arc<Order> {
+	pub fn order(&self, handle: Vec<u8>, unique: Vec<u8>, workload: Vec<u8>, req_s: Sender<Request>) -> Arc<Order> {
 		let log_prefix = format!("[{}] [{}]", self.name, hex::encode(&handle));
 
 		let unique = OsString::from_vec(unique);
@@ -48,19 +51,24 @@ impl super::Worker {
 
 		Arc::new(Order {
 			log_prefix,
+
 			name: self.name.clone(),
 			executor: self.executor.clone(),
 			timeout: self.timeout,
+
 			handle,
 			unique,
 			workload,
+
+			req_s,
+			sent_complete: Arc::new(AtomicBool::new(false)),
 		})
 	}
 }
 
 impl Order {
-	pub async fn run(self: Arc<Self>, req_s: Sender<Request>) {
-		if let Err(err) = self.clone().inner(req_s).await {
+	pub async fn run(self: Arc<Self>) {
+		if let Err(err) = self.clone().inner().await {
 			error!(
 				"{} running order errored (not the workload itself)",
 				self.log_prefix
@@ -69,7 +77,7 @@ impl Order {
 		}
 	}
 
-	async fn inner(self: Arc<Self>, req_s: Sender<Request>) -> Result<()> {
+	async fn inner(self: Arc<Self>) -> Result<()> {
 		debug!("{} starting order", self.log_prefix);
 
 		let mut cmd = Command::new(self.executor.as_ref())
@@ -85,12 +93,8 @@ impl Order {
 
 		debug!("{} spawned order pid={}", self.log_prefix, cmd.id());
 
-		let sent_complete = Arc::new(AtomicBool::new(false));
-
 		let reader = spawn(
 			self.clone().reader(
-				req_s.clone(),
-				sent_complete.clone(),
 				cmd.stdout
 					.take()
 					.ok_or_else(|| eyre!("missing stdout for command"))?,
@@ -127,13 +131,10 @@ impl Order {
 			Ok(s) => {
 				warn!("{} order exited with code={:?}", self.log_prefix, s);
 
-				req_s
-					.send(self.exception(format!(
-						r#"{{"error":"order process exited with code={:?}"}}"#,
-						s
-					)))
-					.await?;
-				sent_complete.store(true, SeqCst);
+				self.exception(format!(
+					r#"{{"error":"order process exited with code={:?}"}}"#,
+					s
+				)).await?;
 			}
 			Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut) => {
 				warn!(
@@ -141,24 +142,21 @@ impl Order {
 					self.log_prefix, self.timeout
 				);
 
-				req_s
-					.send(self.exception(format!(
-						r#"{{"error":"order timed out after duration={:?}"}}"#,
-						self.timeout
-					)))
-					.await?;
-				sent_complete.store(true, SeqCst);
+				self.exception(format!(
+					r#"{{"error":"order timed out after duration={:?}"}}"#,
+					self.timeout
+				)).await?;
 			}
 			Err(e) => {
 				return Err(e.into());
 			}
 		};
 
-		if sent_complete.load(SeqCst) {
+		if self.sent_complete.load(SeqCst) {
 			debug!("{} order done, complete already sent", self.log_prefix);
 		} else {
 			debug!("{} order done, sending empty complete", self.log_prefix);
-			req_s.send(self.complete([])).await?;
+			self.complete([]).await?;
 		}
 
 		reader.await?;
@@ -168,8 +166,6 @@ impl Order {
 
 	async fn reader(
 		self: Arc<Self>,
-		_req_s: Sender<Request>,
-		_sent_complete: Arc<AtomicBool>,
 		stdout: ChildStdout,
 	) -> Result<()> {
 		let stdout = BufReader::new(stdout);
@@ -178,20 +174,61 @@ impl Order {
 			trace!("{} line from stdout: {:?}", self.log_prefix, line?);
 		}
 
+		// try {
+		// 	const data = JSON.parse(line);
+		// 	switch (data.type) {
+		// 		case 'complete':
+		// 			tlog.debug('stdout got completion');
+		// 			tlog.trace({ data }, 'completion');
+		// 			delete data.type;
+		// 			task.end(JSON.stringify(data || {}));
+		// 			run.removeAllListeners();
+		// 			stat(data.error ? 'errored' : 'finished', new Date - start).catch(ohno);
+		// 			resolve();
+		// 		break;
+
+		// 		case 'update':
+		// 			tlog.debug('stdout got update');
+		// 			tlog.trace({ data }, 'update');
+		// 			task.update(JSON.stringify(data.data));
+		// 		break;
+
+		// 		case 'progress':
+		// 			const { numerator, denominator } = data;
+		// 			tlog.debug({ numerator, denominator }, 'stdout got progress');
+		// 			task.progress(numerator, denominator);
+		// 		break;
+
+		// 		case 'print':
+		// 			tlog.debug('stdout got print');
+		// 			process.stderr.write(data.content);
+		// 		break;
+
+		// 		default:
+		// 			throw new Error(`unsupported event type: ${data.type}`);
+		// 	}
+		// } catch (err) {
+		// 	ohno(err);
+		// }
+
 		Ok(())
 	}
 
-	fn exception(&self, data: impl Into<Vec<u8>>) -> Request {
-		Request::WorkException {
+	async fn exception(&self, data: impl Into<Vec<u8>>) -> Result<()> {
+		self.req_s.send(Request::WorkException {
 			handle: self.handle.clone(),
 			data: data.into(),
-		}
+		}).await?;
+		self.sent_complete.store(true, SeqCst);
+		Ok(())
 	}
 
-	fn complete(&self, data: impl Into<Vec<u8>>) -> Request {
-		Request::WorkComplete {
+	async fn complete(&self, data: impl Into<Vec<u8>>) -> Result<()> {
+		self.req_s.send(Request::WorkComplete {
 			handle: self.handle.clone(),
 			data: data.into(),
-		}
+		}).await?;
+		self.sent_complete.store(true, SeqCst);
+		Ok(())
 	}
 }

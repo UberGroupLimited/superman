@@ -52,8 +52,8 @@ impl super::Worker {
 
 					let order = self
 						.clone()
-						.order(handle, unique, workload)
-						.run(req_s.clone());
+						.order(handle, unique, workload, req_s.clone())
+						.run();
 					let this = self.clone();
 					let req_ss = req_s.clone();
 					spawn(order.then(|_| async move {
