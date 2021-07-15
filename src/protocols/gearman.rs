@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use deku::{bitvec::BitVec, prelude::*};
 
 #[derive(Clone, Debug, Eq, PartialEq, DekuRead, DekuWrite)]
@@ -48,7 +50,7 @@ impl Packet {
 		Ok(pkt)
 	}
 
-	pub(crate) fn id(&self) -> u32 {
+	pub(crate) const fn id(&self) -> u32 {
 		match self {
 			Packet {
 				request: Some(r), ..
@@ -60,7 +62,7 @@ impl Packet {
 		}
 	}
 
-	pub(crate) fn name(&self) -> &'static str {
+	pub(crate) const fn name(&self) -> &'static str {
 		match self {
 			Packet {
 				request: Some(r), ..
@@ -106,18 +108,27 @@ pub enum Request {
 	GrabJobUniq,
 	#[deku(id = "12")]
 	WorkStatus {
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(handle.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		handle: Vec<u8>,
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(numerator.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		numerator: Vec<u8>,
-		#[deku(count = "datalen - (handle.len() + numerator.len())")]
+		#[deku(count = "datalen - (2 + handle.len() + numerator.len())")]
 		denominator: Vec<u8>,
 	},
 	#[deku(id = "13")]
 	WorkComplete {
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(handle.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		handle: Vec<u8>,
-		#[deku(count = "datalen - handle.len()")]
+		#[deku(count = "datalen - (1 + handle.len())")]
 		data: Vec<u8>,
 	},
 	#[deku(id = "14")]
@@ -127,22 +138,28 @@ pub enum Request {
 	},
 	#[deku(id = "25")]
 	WorkException {
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(handle.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		handle: Vec<u8>,
-		#[deku(count = "datalen - handle.len()")]
+		#[deku(count = "datalen - (1 + handle.len())")]
 		data: Vec<u8>,
 	},
 	#[deku(id = "28")]
 	WorkData {
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(handle.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		handle: Vec<u8>,
-		#[deku(count = "datalen - handle.len()")]
+		#[deku(count = "datalen - (1 + handle.len())")]
 		data: Vec<u8>,
 	},
 }
 
 impl Request {
-	pub(crate) fn id(&self) -> u32 {
+	pub(crate) const fn id(&self) -> u32 {
 		match self {
 			Self::SetClientId { .. } => 22,
 			Self::CanDo { .. } => 1,
@@ -157,7 +174,7 @@ impl Request {
 		}
 	}
 
-	pub(crate) fn name(&self) -> &'static str {
+	pub(crate) const fn name(&self) -> &'static str {
 		match self {
 			Self::SetClientId { .. } => "SET_CLIENT_ID",
 			Self::CanDo { .. } => "CAN_DO",
@@ -188,19 +205,28 @@ pub enum Response {
 	NoJob,
 	#[deku(id = "31")]
 	JobAssignUniq {
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(handle.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		handle: Vec<u8>,
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(name.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		name: Vec<u8>,
-		#[deku(until = "|v: &u8| *v == 0")]
+		#[deku(
+			map = "from_nul_terminated",
+			writer = "CString::new(unique.to_vec()).unwrap().write(deku::output, ())"
+		)]
 		unique: Vec<u8>,
-		#[deku(count = "datalen - (handle.len() + name.len() + unique.len())")]
+		#[deku(count = "datalen - (3 + handle.len() + name.len() + unique.len())")]
 		workload: Vec<u8>,
 	},
 }
 
 impl Response {
-	pub(crate) fn id(&self) -> u32 {
+	pub(crate) const fn id(&self) -> u32 {
 		match self {
 			Self::Noop => 6,
 			Self::NoJob => 10,
@@ -208,7 +234,7 @@ impl Response {
 		}
 	}
 
-	pub(crate) fn name(&self) -> &'static str {
+	pub(crate) const fn name(&self) -> &'static str {
 		match self {
 			Self::Noop => "NOOP",
 			Self::NoJob => "NO_JOB",
@@ -223,8 +249,13 @@ impl Response {
 	}
 }
 
+fn from_nul_terminated(raw: CString) -> Result<Vec<u8>, DekuError> {
+	Ok(raw.into_bytes())
+}
+
 #[cfg(test)]
 mod tests {
+	// TODO: add tests for all the requests
 	use super::{Packet, PacketMagic, Request, Response};
 	use deku::prelude::*;
 	use std::ffi::CString;
@@ -248,7 +279,7 @@ mod tests {
 	fn read_response_noop() {
 		let data = response_noop();
 		let ((rest, _), pkt) = Packet::from_bytes((&data, 0)).unwrap();
-		assert_eq!(rest, &[]);
+		assert_eq!(rest, &[] as &[u8]);
 		assert_eq!(pkt.magic, PacketMagic::Response);
 		assert_eq!(pkt.response, Some(Response::Noop));
 	}
@@ -270,7 +301,7 @@ mod tests {
 	fn read_response_nojob() {
 		let data = response_nojob();
 		let ((rest, _), pkt) = Packet::from_bytes((&data, 0)).unwrap();
-		assert_eq!(rest, &[]);
+		assert_eq!(rest, &[] as &[u8]);
 		assert_eq!(pkt.magic, PacketMagic::Response);
 		assert_eq!(pkt.response, Some(Response::NoJob));
 	}
@@ -283,7 +314,12 @@ mod tests {
 		);
 	}
 
-	fn response_jobassignuniq(handle: &str, name: &str, unique: &[u8], workload: &[u8]) -> Vec<u8> {
+	fn response_jobassignuniq(
+		handle: &[u8],
+		name: &[u8],
+		unique: &[u8],
+		workload: &[u8],
+	) -> Vec<u8> {
 		let bhandle = CString::new(handle).unwrap();
 		let bhandle = bhandle.as_bytes_with_nul();
 		let bname = CString::new(name).unwrap();
@@ -307,20 +343,20 @@ mod tests {
 	#[test]
 	fn read_response_jobassignuniq() {
 		let data = response_jobassignuniq(
-			"H:localhost:1",
-			"gandhy_matlack",
+			b"H:localhost:1",
+			b"gandhy_matlack",
 			b"e2cb1f42-1181-476e-960a-2c157ddab8ab",
 			b"[1,2,3]",
 		);
 		let ((rest, _), pkt) = Packet::from_bytes((&data, 0)).unwrap();
-		assert_eq!(rest, &[]);
+		assert_eq!(rest, &[] as &[u8]);
 		assert_eq!(pkt.magic, PacketMagic::Response);
 		assert_eq!(
 			pkt.response,
 			Some(Response::JobAssignUniq {
-				handle: b"H:localhost:1\0".to_vec(),
-				name: b"gandhy_matlack\0".to_vec(),
-				unique: b"e2cb1f42-1181-476e-960a-2c157ddab8ab\0".to_vec(),
+				handle: b"H:localhost:1".to_vec(),
+				name: b"gandhy_matlack".to_vec(),
+				unique: b"e2cb1f42-1181-476e-960a-2c157ddab8ab".to_vec(),
 				workload: b"[1,2,3]".to_vec(),
 			})
 		);
@@ -330,14 +366,14 @@ mod tests {
 	fn write_response_jobassignuniq() {
 		assert_eq!(
 			get_bytes(Packet::response(Response::JobAssignUniq {
-				handle: b"H:localhost:2\0".to_vec(),
-				name: b"lahn_ditch\0".to_vec(),
-				unique: b"8fdff463-4e6f-4c6f-8e22-d3b5ea35f6fe\0".to_vec(),
+				handle: b"H:localhost:2".to_vec(),
+				name: b"lahn_ditch".to_vec(),
+				unique: b"8fdff463-4e6f-4c6f-8e22-d3b5ea35f6fe".to_vec(),
 				workload: b"[9,8,7]".to_vec(),
 			})),
 			response_jobassignuniq(
-				"H:localhost:2",
-				"lahn_ditch",
+				b"H:localhost:2",
+				b"lahn_ditch",
 				b"8fdff463-4e6f-4c6f-8e22-d3b5ea35f6fe",
 				b"[9,8,7]"
 			)
@@ -358,7 +394,7 @@ mod tests {
 	fn read_request_cando() {
 		let data = request_cando("helloworld");
 		let ((rest, _), pkt) = Packet::from_bytes((&data, 0)).unwrap();
-		assert_eq!(rest, &[]);
+		assert_eq!(rest, &[] as &[u8]);
 		assert_eq!(pkt.magic, PacketMagic::Request);
 		assert_eq!(
 			pkt.request,
