@@ -17,7 +17,6 @@ impl super::Worker {
 	) -> JoinHandle<Result<()>> {
 		spawn(async move {
 			while let Some(pkt) = res_r.next().await {
-				dbg!(&pkt);
 				if let Response::JobAssignUniq {
 					handle,
 					name,

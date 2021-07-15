@@ -79,7 +79,7 @@ impl Order {
 				"{} running order errored (not the workload itself)",
 				self.log_prefix
 			);
-			error!("{} {}", self.log_prefix, err);
+			error!("{} {:?}", self.log_prefix, err);
 		}
 	}
 
@@ -178,7 +178,7 @@ impl Order {
 		while let Some(line) = lines.next().await {
 			let line = line.map_err(|e| e.into());
 			if let Err(err) = self.clone().read_line(line).await {
-				error!("{} while handling stdout line: {}", self.log_prefix, err);
+				error!("{} while handling stdout line: {:?}", self.log_prefix, err);
 			}
 		}
 
