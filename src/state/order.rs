@@ -120,22 +120,11 @@ impl Order {
 			self.log_prefix, self.timeout
 		);
 
-		// Result is for the process behaviour (actual I/O errors, raise as superman errors),
-		// Option is for the timeout (report as order exception).
-		match timeout(self.timeout, cmd.status())
-			.await
-			.map(Some)
-			.or_else(|err| {
-				if let std::io::ErrorKind::TimedOut = err.kind() {
-					Ok(None)
-				} else {
-					Err(err)
-				}
-			})? {
-			Some(s) if s.success() => {
+		match timeout(self.timeout, cmd.status()).await {
+			Ok(s) if s.success() => {
 				debug!("{} order exited with success", self.log_prefix);
 			}
-			Some(s) => {
+			Ok(s) => {
 				warn!("{} order exited with code={:?}", self.log_prefix, s);
 
 				req_s
@@ -146,7 +135,7 @@ impl Order {
 					.await?;
 				sent_complete.store(true, SeqCst);
 			}
-			None => {
+			Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut) => {
 				warn!(
 					"{} order timed out after duration={:?}, killed",
 					self.log_prefix, self.timeout
@@ -159,6 +148,9 @@ impl Order {
 					)))
 					.await?;
 				sent_complete.store(true, SeqCst);
+			}
+			Err(e) => {
+				return Err(e.into());
 			}
 		};
 
