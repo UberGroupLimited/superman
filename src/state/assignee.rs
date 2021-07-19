@@ -44,7 +44,7 @@ impl super::Worker {
 						}
 					}
 
-					if self.current_load.fetch_add(1, Ordering::Relaxed) + 1 < self.concurrency {
+					if !self.exit.burnt() && self.current_load.fetch_add(1, Ordering::Relaxed) + 1 < self.concurrency {
 						debug!("[{}] can still do more work, asking", self.name,);
 						req_s.send(Request::PreSleep).await?;
 					}
@@ -56,7 +56,7 @@ impl super::Worker {
 					let this = self.clone();
 					let req_ss = req_s.clone();
 					spawn(order.then(|_| async move {
-						if this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
+						if !this.exit.burnt() && this.current_load.fetch_sub(1, Ordering::Relaxed) - 1 < this.concurrency
 						{
 							debug!("[{}] can do more work now, asking", this.name);
 							req_ss
