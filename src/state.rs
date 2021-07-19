@@ -26,7 +26,7 @@ pub struct State {
 	server: SocketAddr,
 	base_id: Box<str>,
 	workers: DashMap<Arc<str>, Arc<Worker>>,
-	running: Fuze,
+	running: Fuze<()>,
 }
 
 impl State {
@@ -59,10 +59,9 @@ impl State {
 		}))
 	}
 
-	pub async fn wait(self: Arc<Self>) -> Result<()> {
-		self.running.wait().await?;
+	pub async fn wait(self: Arc<Self>) {
+		self.running.wait().await;
 		trace!("not running anymore");
-		Ok(())
 	}
 
 	pub fn start_worker(
@@ -92,9 +91,9 @@ impl State {
 
 	pub async fn stop_worker(&self, name: &str) -> Result<()> {
 		if let Some(wrk) = self.workers.get(name) {
-			wrk.exit.burn().await?;
+			info!("[{}] signalling worker to stop", name);
+			wrk.exit.burn();
 			// worker will clean up after itself
-			// TODO: ^ do that
 		}
 
 		Ok(())

@@ -121,10 +121,7 @@ impl<T> Default for Fuze<T> {
 	/// ```
 	fn default() -> Self {
 		let (s, r) = bounded(1);
-		Self {
-			s,
-			r,
-		}
+		Self { s, r }
 	}
 }
 
@@ -132,10 +129,7 @@ impl Fuze<()> {
 	/// Creates a new unburnt fuze.
 	pub fn new() -> Self {
 		let (s, r) = bounded(1);
-		Self {
-			s,
-			r,
-		}
+		Self { s, r }
 	}
 }
 
@@ -149,7 +143,7 @@ impl<T> Fuze<T> {
 	}
 
 	/// Burns the fuze, unblocking everything that is waiting on it.
-	pub fn burn(&self)  {
+	pub fn burn(&self) {
 		if !self.s.is_closed() {
 			self.s.close();
 		}

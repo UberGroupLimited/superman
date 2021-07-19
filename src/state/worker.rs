@@ -22,7 +22,7 @@ pub struct Worker {
 	pub timeout: Duration,
 	pub client_id: Arc<str>,
 	pub current_load: AtomicUsize,
-	pub exit: Fuze,
+	pub exit: Fuze<()>,
 }
 
 impl Worker {

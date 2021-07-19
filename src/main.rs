@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
 		Duration::from_secs(120),
 	);
 
-	state.wait().await?;
+	state.wait().await;
 
 	Ok(())
 }
