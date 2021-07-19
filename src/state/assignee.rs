@@ -70,6 +70,7 @@ impl super::Worker {
 				}
 			}
 
+			debug!("[{}] assignee task exiting", self.name);
 			Ok(())
 		})
 	}

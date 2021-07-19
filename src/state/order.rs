@@ -1,12 +1,14 @@
 use std::{
 	ffi::OsString,
-	os::unix::ffi::OsStringExt,
 	sync::{
 		atomic::{AtomicBool, Ordering::SeqCst},
 		Arc,
 	},
 	time::Duration,
 };
+
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 
 use crate::protocols::{gearman::Request, order};
 use async_std::{
@@ -18,6 +20,7 @@ use async_std::{
 };
 use color_eyre::eyre::{eyre, Result};
 use futures::{AsyncBufReadExt, AsyncWriteExt, StreamExt};
+use fuze::Fuze;
 use log::{debug, error, info, trace, warn};
 
 #[derive(Debug)]

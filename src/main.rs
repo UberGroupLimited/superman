@@ -47,6 +47,10 @@ async fn main() -> Result<()> {
 		Duration::from_secs(120),
 	);
 
+	async_std::task::sleep(std::time::Duration::from_secs(15)).await;
+
+	state.stop_worker("Test::sleep").await?;
+
 	state.wait().await;
 
 	Ok(())

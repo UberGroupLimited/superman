@@ -9,7 +9,10 @@ use async_std::{
 };
 use color_eyre::eyre::Result;
 use deku::{prelude::DekuError, DekuContainerRead};
-use futures::io::ReadHalf;
+use futures::{
+	future::{select, Either},
+	io::ReadHalf,
+};
 use log::{debug, trace, warn};
 
 impl super::Worker {
@@ -24,7 +27,15 @@ impl super::Worker {
 			'recv: loop {
 				trace!("[{}] waiting for data", self.name);
 				let mut buf = vec![0_u8; 1024];
-				let len = ReadExt::read(&mut gear_read, &mut buf).await?;
+
+				let exit = self.exit.clone();
+				let len =
+					match select(Box::pin(gear_read.read(&mut buf)), Box::pin(exit.wait())).await {
+						Either::Left((Ok(len), _)) => len,
+						Either::Left((Err(err), _)) => return Err(err.into()),
+						Either::Right(_) => break 'recv,
+					};
+
 				packet.extend(&buf[0..len]);
 				trace!("[{}] received packet bytes: {:?}", self.name, &packet);
 
@@ -87,6 +98,9 @@ impl super::Worker {
 					}
 				}
 			}
+
+			debug!("[{}] reader task exiting", self.name);
+			Ok(())
 		})
 	}
 }

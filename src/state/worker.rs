@@ -1,18 +1,22 @@
 use std::{
-	sync::{atomic::AtomicUsize, Arc},
+	sync::{
+		atomic::{AtomicUsize, Ordering::SeqCst},
+		Arc,
+	},
 	time::Duration,
 };
 
-use crate::protocols::gearman::Request;
+use crate::protocols::gearman::{Request, Response};
 use async_std::{
-	channel::bounded,
+	channel::{bounded, Sender},
 	net::{SocketAddr, TcpStream},
 	path::Path,
+	task::{spawn, JoinHandle},
 };
 use color_eyre::eyre::Result;
-use futures::io::AsyncReadExt;
+use futures::{future::try_join_all, io::AsyncReadExt};
 use fuze::Fuze;
-use log::debug;
+use log::{debug, info};
 
 #[derive(Debug)]
 pub struct Worker {
@@ -53,15 +57,51 @@ impl Worker {
 		let (res_s, res_r) = bounded(512);
 		let (req_s, req_r) = bounded(512);
 
-		let reader = self.clone().reader(gear_read, res_s, req_s.clone());
+		let exitter = self.clone().exitter(res_s.clone(), req_s.clone());
+		let reader = self.clone().reader(gear_read, res_s.clone(), req_s.clone());
 		let writer = self.clone().writer(gear_write, req_r);
-		let assignee = self.clone().assignee(res_r, req_s);
+		let assignee = self.clone().assignee(res_r, req_s.clone());
 
-		// TODO: try join or something
-		reader.await?;
-		writer.await?;
-		assignee.await?;
+		if let Err(err) = try_join_all([exitter, reader, writer, assignee]).await {
+			if self.exit.burnt() {
+				info!("[{}] worker stopped", self.name);
+			} else {
+				debug!(
+					"[{}] got fatal error, trying to run exitter anyway",
+					self.name
+				);
+				self.exit.burn();
+				self.clone().exitter(res_s, req_s).await?;
+			}
 
-		Ok(())
+			Err(err)
+		} else {
+			info!("[{}] worker stopped", self.name);
+			Ok(())
+		}
+	}
+
+	fn exitter(
+		self: Arc<Self>,
+		res_s: Sender<Response>,
+		req_s: Sender<Request>,
+	) -> JoinHandle<Result<()>> {
+		spawn(async move {
+			self.exit.wait().await;
+			debug!("[{}] exitter task running", self.name);
+
+			// closing the res channel will end the assignee task
+			res_s.close();
+
+			if self.current_load.load(SeqCst) > 0 {
+				// we need to wait for the worker tasks to finish
+				// before we can really exit
+				todo!();
+			} else {
+				req_s.close();
+			}
+
+			Ok(())
+		})
 	}
 }

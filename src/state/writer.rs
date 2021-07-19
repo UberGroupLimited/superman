@@ -23,9 +23,30 @@ impl super::Worker {
 		mut req_r: Receiver<Request>,
 	) -> JoinHandle<Result<()>> {
 		spawn(async move {
+			let mut sent_cant = false;
+
 			while let Some(pkt) = req_r.next().await {
+				if !sent_cant && self.exit.burnt() {
+					Request::CantDo {
+						name: self.name.as_bytes().to_vec(),
+					}
+					.send(&mut gear_write)
+					.await?;
+					sent_cant = true;
+				}
+
 				debug!("[{}] sending {} ({})", self.name, pkt.name(), pkt.id());
 				pkt.send(&mut gear_write).await?;
+			}
+
+			debug!("[{}] writer task exiting", self.name);
+
+			if !sent_cant {
+				Request::CantDo {
+					name: self.name.as_bytes().to_vec(),
+				}
+				.send(&mut gear_write)
+				.await?;
 			}
 
 			Ok(())
