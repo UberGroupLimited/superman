@@ -22,10 +22,10 @@ task::block_on(async move {
 
   	task::spawn(async move {
   		task::sleep(Duration::from_secs(1)).await;
-  		f3.burn().await.unwrap();
+  		f3.burn();
   	});
 
-  	f2.wait().await.unwrap();
+  	f2.wait().await;
    println!("Adios!");
 });
 ```
