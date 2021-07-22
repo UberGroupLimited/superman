@@ -561,6 +561,15 @@ dependencies = [
 [[package]]
 name = "fuze"
 version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b80d64723b4ef23cca7b89b21355cd31b055d61ce93bd57a21a4f474dc39013"
+dependencies = [
+ "async-std",
+]
+
+[[package]]
+name = "fuze"
+version = "3.0.0"
 dependencies = [
  "async-std",
  "cfg-if",
@@ -1006,7 +1015,7 @@ dependencies = [
  "dashmap",
  "deku",
  "futures",
- "fuze",
+ "fuze 2.0.0",
  "hex",
  "hostname",
  "log",
