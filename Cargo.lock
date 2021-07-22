@@ -563,6 +563,8 @@ name = "fuze"
 version = "2.0.0"
 dependencies = [
  "async-std",
+ "cfg-if",
+ "tokio",
 ]
 
 [[package]]
@@ -1086,6 +1088,17 @@ checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "tokio"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2602b8af3767c285202012822834005f596c811042315fa7e9f5b12b2a43207"
+dependencies = [
+ "autocfg",
+ "num_cpus",
+ "pin-project-lite",
 ]
 
 [[package]]

@@ -8,8 +8,9 @@ can be awaited while it’s unburnt, and it can be Cloned and used without `mut`
 Useful for exit conditions and as a one-off no-payload channel.
 
 - **[API documentation](https://docs.rs/fuze)**
+- Supports Async-std and Tokio.
 
-```
+```rust
 use fuze::Fuze;
 use async_std::task;
 use std::time::Duration;
