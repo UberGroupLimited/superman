@@ -67,11 +67,10 @@ impl Worker {
 				info!("[{}] worker stopped", self.name);
 			} else {
 				debug!(
-					"[{}] got fatal error, trying to run exitter anyway",
+					"[{}] got fatal error, burning exit anyway",
 					self.name
 				);
 				self.exit.burn();
-				self.clone().exitter(res_s, req_s).await?;
 			}
 
 			Err(err)
@@ -91,15 +90,12 @@ impl Worker {
 			debug!("[{}] exitter task running", self.name);
 
 			// closing the res channel will end the assignee task
+			// once it has processed all that remains
 			res_s.close();
 
-			if self.current_load.load(SeqCst) > 0 {
-				// we need to wait for the worker tasks to finish
-				// before we can really exit
-				todo!();
-			} else {
-				req_s.close();
-			}
+			// we need to wait for the worker tasks to finish
+			// before we can really exit
+			drop(req_s);
 
 			Ok(())
 		})
