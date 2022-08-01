@@ -4,7 +4,7 @@ set -euo pipefail
 
 app="superman"
 mainbranch="main"
-upstream_rx="passcod"
+upstream_rx="UberGroupLimited"
 
 curbranch=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$curbranch" != "$mainbranch" ]]; then

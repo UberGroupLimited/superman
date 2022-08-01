@@ -200,7 +200,9 @@ function handler (state, name) {
 					} else {
 						tlog.debug('exit event with failure, rejecting');
 						run.removeAllListeners();
-						reject(new Error(`worker executor exited with ${code}\n${stderr}`));
+						// reject(new Error(`worker executor exited with ${code}\n${stderr}`));
+						reject(new Error(`worker executor exited with ${code}\n${stderr} ${JSON.stringify(args || {})}`));
+
 					}
 				});
 
@@ -223,7 +225,7 @@ function handler (state, name) {
 			fn.running.decr();
 
 			tlog.debug({ workdir }, 'deleting workdir');
-			await fs.rmdir(workdir, {
+			await fs.rm(workdir, {
 				maxRetries: 20,
 				recursive: true,
 			});
